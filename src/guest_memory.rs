@@ -5,14 +5,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the THIRD-PARTY file.
 
-//! Track memory regions that are mapped to the guest microVM.
+//! Track memory regions that are mapped to the guest VM.
 
+#![allow(missing_docs)]
+
+use std::fmt::{self, Display};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::{mem, result};
 
 use guest_address::GuestAddress;
 use mmap::{self, MemoryMapping};
+use volatile_memory::*;
 use DataInit;
 
 /// Errors associated with handling guest memory regions.
@@ -32,8 +36,49 @@ pub enum Error {
     MemoryRegionOverlap,
     /// No memory regions were provided for initializing the guest memory.
     NoMemoryRegions,
+    /// Incomplete write
+    ShortWrite { expected: usize, completed: usize },
+    /// Incomplete read
+    ShortRead { expected: usize, completed: usize },
 }
 type Result<T> = result::Result<T, Error>;
+
+impl std::error::Error for Error {}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Guest memory error: ")?;
+        match self {
+            Error::InvalidGuestAddress(_) => write!(f, "Invalid Guest Address"),
+            Error::MemoryAccess(_, _) => write!(f, "Invalid Guest Memory Access"),
+            Error::MemoryMappingFailed(_) => write!(f, "Failed to map guest memory"),
+            Error::MemoryRegionOverlap => write!(f, "Memory regions overlap"),
+            Error::MemoryNotInitialized => write!(f, "Memory not initialized yet"),
+            Error::NoMemoryRegions => write!(f, "No region for address found"),
+            Error::InvalidGuestAddressRange(base, size) => write!(
+                f,
+                "invalid address range, base {}/size {}",
+                base.offset(), size,
+            ),
+            Error::ShortWrite {
+                expected,
+                completed,
+            } => write!(
+                f,
+                "incomplete write of {} instead of {} bytes",
+                completed, expected,
+            ),
+            Error::ShortRead {
+                expected,
+                completed,
+            } => write!(
+                f,
+                "incomplete read of {} instead of {} bytes",
+                completed, expected,
+            ),
+        }
+    }
+}
 
 /// Tracks a mapping of anonymous memory in the current process and the corresponding base address
 /// in the guest's memory space.
@@ -53,7 +98,7 @@ fn region_end(region: &MemoryRegion) -> GuestAddress {
     region.guest_base.unchecked_add(region.mapping.size())
 }
 
-/// Tracks all memory regions allocated for the guest in the current process.
+/// Tracks all memory regions allocated/mapped for the guest in the current process.
 #[derive(Clone)]
 pub struct GuestMemory {
     regions: Arc<Vec<MemoryRegion>>,
@@ -111,6 +156,14 @@ impl GuestMemory {
             .map_or(GuestAddress(0), |region| region_end(region))
     }
 
+    /// Returns the total size of memory in bytes.
+    pub fn memory_size(&self) -> usize {
+        self.regions
+            .iter()
+            .map(|region| region.mapping.size())
+            .sum()
+    }
+
     /// Returns true if the given address is within the memory range available to the guest.
     pub fn address_in_range(&self, addr: GuestAddress) -> bool {
         for region in self.regions.iter() {
@@ -136,6 +189,15 @@ impl GuestMemory {
     /// Returns the size of the memory region in bytes.
     pub fn num_regions(&self) -> usize {
         self.regions.len()
+    }
+
+    /// Madvise away the address range in the host that is associated with the given guest range.
+    pub fn remove_range(&self, addr: GuestAddress, count: usize) -> Result<()> {
+        self.do_in_region(addr, count, move |mapping, offset| {
+            mapping
+                .remove_range(offset, count)
+                .map_err(|e| Error::MemoryAccess(addr, e))
+        })
     }
 
     /// Perform the specified action on each region's addresses.
@@ -183,17 +245,48 @@ impl GuestMemory {
     /// # fn test_write_u64() -> Result<(), ()> {
     /// #   let start_addr = GuestAddress(0x1000);
     /// #   let mut gm = GuestMemory::new(&vec![(start_addr, 0x400)]).map_err(|_| ())?;
-    ///     let res = gm.write_slice_at_addr(&[1,2,3,4,5], GuestAddress(0x200)).map_err(|_| ())?;
+    ///     let res = gm.write_at_addr(&[1,2,3,4,5], GuestAddress(0x200)).map_err(|_| ())?;
     ///     assert_eq!(5, res);
     ///     Ok(())
     /// # }
     /// ```
-    pub fn write_slice_at_addr(&self, buf: &[u8], guest_addr: GuestAddress) -> Result<usize> {
+    pub fn write_at_addr(&self, buf: &[u8], guest_addr: GuestAddress) -> Result<usize> {
         self.do_in_region_partial(guest_addr, move |mapping, offset| {
             mapping
                 .write_slice(buf, offset)
                 .map_err(|e| Error::MemoryAccess(guest_addr, e))
         })
+    }
+
+    /// Writes the entire contents of a slice to guest memory at the specified
+    /// guest address.
+    ///
+    /// Returns an error if there isn't enough room in the memory region to
+    /// complete the entire write. Part of the data may have been written
+    /// nevertheless.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use memory_model::{GuestAddress, GuestMemory};
+    ///
+    /// fn test_write_all() {
+    ///     let ranges = &[(GuestAddress(0x1000), 0x400)];
+    ///     let gm = GuestMemory::new(ranges).unwrap();
+    ///     gm.write_all_at_addr(b"zyxwvut", GuestAddress(0x1200)).unwrap();
+    /// }
+    /// ```
+    pub fn write_all_at_addr(&self, buf: &[u8], guest_addr: GuestAddress) -> Result<()> {
+        let expected = buf.len();
+        let completed = self.write_at_addr(buf, guest_addr)?;
+        if expected == completed {
+            Ok(())
+        } else {
+            Err(Error::ShortWrite {
+                expected,
+                completed,
+            })
+        }
     }
 
     /// Reads to a slice from guest memory at the specified guest address.
@@ -225,6 +318,37 @@ impl GuestMemory {
                 .read_slice(buf, offset)
                 .map_err(|e| Error::MemoryAccess(guest_addr, e))
         })
+    }
+
+    /// Reads from guest memory at the specified address to fill the entire
+    /// buffer.
+    ///
+    /// Returns an error if there isn't enough room in the memory region to fill
+    /// the entire buffer. Part of the buffer may have been filled nevertheless.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use memory_model::{GuestAddress, GuestMemory, MemoryMapping};
+    ///
+    /// fn test_read_exact() {
+    ///     let ranges = &[(GuestAddress(0x1000), 0x400)];
+    ///     let gm = GuestMemory::new(ranges).unwrap();
+    ///     let mut buffer = [0u8; 0x200];
+    ///     gm.read_exact_at_addr(&mut buffer, GuestAddress(0x1200)).unwrap();
+    /// }
+    /// ```
+    pub fn read_exact_at_addr(&self, buf: &mut [u8], guest_addr: GuestAddress) -> Result<()> {
+        let expected = buf.len();
+        let completed = self.read_slice_at_addr(buf, guest_addr)?;
+        if expected == completed {
+            Ok(())
+        } else {
+            Err(Error::ShortRead {
+                expected,
+                completed,
+            })
+        }
     }
 
     /// Reads an object from guest memory at the given guest address.
@@ -464,6 +588,19 @@ impl GuestMemory {
     }
 }
 
+impl VolatileMemory for GuestMemory {
+    fn get_slice(&self, offset: usize, count: usize) -> VolatileMemoryResult<VolatileSlice> {
+        for region in self.regions.iter() {
+            if offset >= region.guest_base.0 && offset < region_end(region).0 {
+                return region
+                    .mapping
+                    .get_slice(offset - region.guest_base.0, count);
+            }
+        }
+        Err(VolatileMemoryError::OutOfBounds { addr: offset })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -549,14 +686,14 @@ mod tests {
         let gm = GuestMemory::new(&vec![(start_addr, 0x400)]).unwrap();
         let sample_buf = &[1, 2, 3, 4, 5];
 
-        assert_eq!(gm.write_slice_at_addr(sample_buf, start_addr).unwrap(), 5);
+        assert_eq!(gm.write_at_addr(sample_buf, start_addr).unwrap(), 5);
 
         let buf = &mut [0u8; 5];
         assert_eq!(gm.read_slice_at_addr(buf, start_addr).unwrap(), 5);
         assert_eq!(buf, sample_buf);
 
         start_addr = GuestAddress(0x13ff);
-        assert_eq!(gm.write_slice_at_addr(sample_buf, start_addr).unwrap(), 1);
+        assert_eq!(gm.write_at_addr(sample_buf, start_addr).unwrap(), 1);
         assert_eq!(gm.read_slice_at_addr(buf, start_addr).unwrap(), 1);
         assert_eq!(buf[0], sample_buf[0]);
     }
@@ -645,5 +782,54 @@ mod tests {
             ),
             3
         );
+    }
+
+    #[test]
+    fn test_ref_load_u64() {
+        let start_addr1 = GuestAddress(0x0);
+        let start_addr2 = GuestAddress(0x1000);
+        let gm = GuestMemory::new(&vec![(start_addr1, 0x1000), (start_addr2, 0x1000)]).unwrap();
+
+        let val1: u64 = 0xaa55aa55aa55aa55;
+        let val2: u64 = 0x55aa55aa55aa55aa;
+        gm.write_obj_at_addr(val1, GuestAddress(0x500)).unwrap();
+        gm.write_obj_at_addr(val2, GuestAddress(0x1000 + 32))
+            .unwrap();
+        let num1: u64 = gm.get_ref(0x500).unwrap().load();
+        let num2: u64 = gm.get_ref(0x1000 + 32).unwrap().load();
+        assert_eq!(val1, num1);
+        assert_eq!(val2, num2);
+    }
+
+    #[test]
+    fn test_ref_store_u64() {
+        let start_addr1 = GuestAddress(0x0);
+        let start_addr2 = GuestAddress(0x1000);
+        let gm = GuestMemory::new(&vec![(start_addr1, 0x1000), (start_addr2, 0x1000)]).unwrap();
+
+        let val1: u64 = 0xaa55aa55aa55aa55;
+        let val2: u64 = 0x55aa55aa55aa55aa;
+        gm.get_ref(0x500).unwrap().store(val1);
+        gm.get_ref(0x1000 + 32).unwrap().store(val2);
+        let num1: u64 = gm.read_obj_from_addr(GuestAddress(0x500)).unwrap();
+        let num2: u64 = gm.read_obj_from_addr(GuestAddress(0x1000 + 32)).unwrap();
+        assert_eq!(val1, num1);
+        assert_eq!(val2, num2);
+    }
+
+    #[test]
+    fn test_memory_size() {
+        let start_region1 = GuestAddress(0x0);
+        let size_region1 = 0x1000;
+        let start_region2 = GuestAddress(0x10000);
+        let size_region2 = 0x2000;
+        let gm = GuestMemory::new(&vec![
+            (start_region1, size_region1),
+            (start_region2, size_region2),
+        ])
+        .unwrap();
+
+        let mem_size = gm.memory_size();
+        assert_eq!(mem_size, size_region1 + size_region2);
     }
 }
