@@ -23,6 +23,7 @@ extern crate memory-model;
 ```
 
 # TODO List
-- import endian.rs from crosvm project
-- rebase address\_space.rs
-- better documentation and test cases
+- Decide whether to import endian.rs from crosvm project.
+- Better documentation and more test cases.
+- Change AddressSpace and GuestAddress to use u64 instead of usize to support following usage case:
+On 64-bit arm devices, we usually run a 32-bit userspace with a 64-bit kernel. In this case, the machine word size (usize) that crosvm is compiled with (32-bit) isn't the same as the one the guest kernel, host kernel, hardware is using (64-bit). We used u64 to ensure that the size was always at least as big as needed.
