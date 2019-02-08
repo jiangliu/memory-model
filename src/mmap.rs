@@ -406,8 +406,8 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::mem;
-    use std::path::Path;
     use std::os::unix::io::FromRawFd;
+    use std::path::Path;
 
     #[test]
     fn basic_map() {

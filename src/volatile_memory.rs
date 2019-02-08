@@ -506,7 +506,9 @@ mod tests {
             if mem_end > self.mem.len() {
                 return Err(Error::OutOfBounds { addr: mem_end });
             }
-            Ok(unsafe { VolatileSlice::new((self.mem.as_ptr() as usize + offset) as *mut _, count) })
+            Ok(unsafe {
+                VolatileSlice::new((self.mem.as_ptr() as usize + offset) as *mut _, count)
+            })
         }
     }
 

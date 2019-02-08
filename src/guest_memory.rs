@@ -58,7 +58,8 @@ impl Display for Error {
             Error::InvalidGuestAddressRange(base, size) => write!(
                 f,
                 "invalid address range, base {}/size {}",
-                base.offset(), size,
+                base.offset(),
+                size,
             ),
             Error::ShortWrite {
                 expected,
