@@ -14,6 +14,9 @@ extern crate libc;
 use std::mem::size_of;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
+pub mod endian;
+pub use endian::*;
+
 pub mod volatile_memory;
 pub use volatile_memory::*;
 
