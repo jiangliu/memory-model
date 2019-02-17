@@ -21,6 +21,9 @@ pub use address_space::*;
 pub mod endian;
 pub use endian::*;
 
+pub mod guest_memory;
+pub use guest_memory::*;
+
 pub mod volatile_memory;
 pub use volatile_memory::*;
 
