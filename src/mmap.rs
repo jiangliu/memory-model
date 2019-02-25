@@ -47,6 +47,17 @@ pub struct MmapRegion {
     size: usize,
 }
 
+/// Errors that can happen when creating a memory map
+#[derive(Debug)]
+pub enum MmapError {
+    /// Syscall returned the given error.
+    SystemCallFailed(io::Error),
+    /// No memory region found.
+    NoMemoryRegion,
+    /// Some of the memory regions intersect with each other.
+    MemoryRegionOverlap,
+}
+
 // Send and Sync aren't automatically inherited for the raw address pointer.
 // Accessing that pointer is only done through the stateless interface which
 // allows the object to be shared by multiple threads without a decrease in
@@ -59,7 +70,7 @@ impl MmapRegion {
     ///
     /// # Arguments
     /// * `size` - Size of memory region in bytes.
-    pub fn new(size: usize) -> Result<Self> {
+    pub fn new(size: usize) -> io::Result<Self> {
         // This is safe because we are creating an anonymous mapping in a place not already used by
         // any other area in this process.
         let addr = unsafe {
@@ -73,7 +84,7 @@ impl MmapRegion {
             )
         };
         if addr == libc::MAP_FAILED {
-            return Err(Error::SystemCallFailed(io::Error::last_os_error()));
+            return Err(io::Error::last_os_error());
         }
         Ok(Self {
             addr: addr as *mut u8,
@@ -87,10 +98,7 @@ impl MmapRegion {
     /// * `fd` - File descriptor to mmap from.
     /// * `size` - Size of memory region in bytes.
     /// * `offset` - Offset in bytes from the beginning of `fd` to start the mmap.
-    pub fn from_fd(fd: &AsRawFd, size: usize, offset: usize) -> Result<Self> {
-        if offset > libc::off_t::max_value() as usize {
-            return Err(Error::InvalidBackendOffset);
-        }
+    pub fn from_fd(fd: &AsRawFd, size: usize, offset: libc::off_t) -> io::Result<Self> {
         // This is safe because we are creating a mapping in a place not already used by any other
         // area in this process.
         let addr = unsafe {
@@ -104,7 +112,7 @@ impl MmapRegion {
             )
         };
         if addr == libc::MAP_FAILED {
-            return Err(Error::SystemCallFailed(io::Error::last_os_error()));
+            return Err(io::Error::last_os_error());
         }
         Ok(Self {
             addr: addr as *mut u8,
@@ -182,7 +190,7 @@ impl AddressRegion for MmapRegion {
             // volatile.  Writing to it with what compiles down to a memcpy
             // won't hurt anything as long as we get the bounds checks right.
             let mut slice: &mut [u8] = &mut self.as_mut_slice()[addr.raw_value()..];
-            Ok(slice.write(buf).map_err(Error::WriteToMemory)?)
+            Ok(slice.write(buf).map_err(Error::IOError)?)
         }
     }
 
@@ -210,7 +218,7 @@ impl AddressRegion for MmapRegion {
             // volatile.  Writing to it with what compiles down to a memcpy
             // won't hurt anything as long as we get the bounds checks right.
             let slice: &[u8] = &self.as_slice()[addr.raw_value()..];
-            Ok(buf.write(slice).map_err(Error::ReadFromMemory)?)
+            Ok(buf.write(slice).map_err(Error::IOError)?)
         }
     }
 
@@ -229,7 +237,7 @@ impl AddressRegion for MmapRegion {
     fn write_slice(&self, buf: &[u8], addr: MmapAddress) -> Result<()> {
         let len = self.write(buf, addr)?;
         if len != buf.len() {
-            return Err(Error::ShortWrite {
+            return Err(Error::PartialBuffer {
                 expected: buf.len() as u64,
                 completed: len as u64,
             });
@@ -253,7 +261,7 @@ impl AddressRegion for MmapRegion {
     fn read_slice(&self, buf: &mut [u8], addr: MmapAddress) -> Result<()> {
         let len = self.read(buf, addr)?;
         if len != buf.len() {
-            return Err(Error::ShortRead {
+            return Err(Error::PartialBuffer {
                 expected: buf.len() as u64,
                 completed: len as u64,
             });
@@ -342,7 +350,7 @@ impl AddressRegion for MmapRegion {
             // memory as a mutable slice is OK because nothing assumes another
             // thread won't change what is loaded.
             let dst = &mut self.as_mut_slice()[addr.raw_value()..end];
-            src.read_exact(dst).map_err(Error::ReadFromSource)?;
+            src.read_exact(dst).map_err(Error::IOError)?;
         }
         Ok(())
     }
@@ -374,7 +382,7 @@ impl AddressRegion for MmapRegion {
             // memory as a slice is OK because nothing assumes another thread
             // won't change what is loaded.
             let src = &self.as_mut_slice()[addr.raw_value()..end];
-            dst.write_all(src).map_err(Error::ReadFromSource)?;
+            dst.write_all(src).map_err(Error::IOError)?;
         }
         Ok(())
     }
@@ -515,9 +523,9 @@ pub struct GuestMemoryMmap {
 impl GuestMemoryMmap {
     /// Creates a container and allocates anonymous memory for guest memory regions.
     /// Valid memory regions are specified as a Vec of (Address, Size) tuples sorted by Address.
-    pub fn new(ranges: &[(GuestAddress, usize)]) -> Result<Self> {
+    pub fn new(ranges: &[(GuestAddress, usize)]) -> std::result::Result<Self, MmapError> {
         if ranges.is_empty() {
-            return Err(Error::NoMemoryRegion);
+            return Err(MmapError::NoMemoryRegion);
         }
 
         let mut regions = Vec::<GuestRegionMmap>::new();
@@ -528,11 +536,11 @@ impl GuestMemoryMmap {
                     .checked_add(last.mapping.size() as GuestAddressValue)
                     .map_or(true, |a| a > range.0)
                 {
-                    return Err(Error::MemoryRegionOverlap);
+                    return Err(MmapError::MemoryRegionOverlap);
                 }
             }
 
-            let mapping = MmapRegion::new(range.1).map_err(|_| Error::BackendOpFailed)?;
+            let mapping = MmapRegion::new(range.1).map_err(|e| { MmapError::SystemCallFailed(e) })?;
             regions.push(GuestRegionMmap {
                 mapping,
                 guest_base: range.0,
@@ -660,7 +668,7 @@ impl AddressRegion for GuestMemoryMmap {
             },
         )?;
         if res != buf.len() {
-            return Err(Error::ShortWrite {
+            return Err(Error::PartialBuffer {
                 expected: buf.len() as GuestAddressValue,
                 completed: res as GuestAddressValue,
             });
@@ -680,7 +688,7 @@ impl AddressRegion for GuestMemoryMmap {
             },
         )?;
         if res != buf.len() {
-            return Err(Error::ShortRead {
+            return Err(Error::PartialBuffer {
                 expected: buf.len() as GuestAddressValue,
                 completed: res as GuestAddressValue,
             });
@@ -766,11 +774,11 @@ impl AddressRegion for GuestMemoryMmap {
             let len = std::cmp::min(cap, cnt);
             let end = start + len;
             let dst = unsafe { &mut region.as_mut_slice()[start..end] };
-            src.read_exact(dst).map_err(Error::ReadFromSource)?;
+            src.read_exact(dst).map_err(Error::IOError)?;
             Ok(len)
         })?;
         if res != count {
-            return Err(Error::ShortWrite {
+            return Err(Error::PartialBuffer {
                 expected: count as GuestAddressValue,
                 completed: res as GuestAddressValue,
             });
@@ -813,11 +821,11 @@ impl AddressRegion for GuestMemoryMmap {
             // It is safe to read from volatile memory. Accessing the guest
             // memory as a slice is OK because nothing assumes another thread
             // won't change what is loaded.
-            dst.write_all(src).map_err(Error::ReadFromSource)?;
+            dst.write_all(src).map_err(Error::IOError)?;
             Ok(len)
         })?;
         if res != count {
-            return Err(Error::ShortRead {
+            return Err(Error::PartialBuffer {
                 expected: count as GuestAddressValue,
                 completed: res as GuestAddressValue,
             });
@@ -884,23 +892,15 @@ mod tests {
 
     #[test]
     fn map_invalid_size() {
-        let res = MmapRegion::new(0).unwrap_err();
-        if let Error::SystemCallFailed(e) = res {
-            assert_eq!(e.raw_os_error(), Some(libc::EINVAL));
-        } else {
-            panic!("unexpected error: {:?}", res);
-        }
+        let e = MmapRegion::new(0).unwrap_err();
+        assert_eq!(e.raw_os_error(), Some(libc::EINVAL));
     }
 
     #[test]
     fn map_invalid_fd() {
         let fd = unsafe { std::fs::File::from_raw_fd(-1) };
-        let res = MmapRegion::from_fd(&fd, 1024, 0).unwrap_err();
-        if let Error::SystemCallFailed(e) = res {
-            assert_eq!(e.raw_os_error(), Some(libc::EBADF));
-        } else {
-            panic!("unexpected error: {:?}", res);
-        }
+        let e = MmapRegion::from_fd(&fd, 1024, 0).unwrap_err();
+        assert_eq!(e.raw_os_error(), Some(libc::EBADF));
     }
 
     #[test]
@@ -943,17 +943,6 @@ mod tests {
         let m = MmapRegion::new(5).unwrap();
         let res = m.get_slice(3, 3).unwrap_err();
         assert_eq!(res, VolatileMemoryError::OutOfBounds { addr: 6 });
-    }
-
-    #[test]
-    fn from_fd_offset_invalid() {
-        let fd = unsafe { std::fs::File::from_raw_fd(-1) };
-        let res =
-            MmapRegion::from_fd(&fd, 4096, (libc::off_t::max_value() as usize) + 1).unwrap_err();
-        match res {
-            Error::InvalidBackendOffset => {}
-            e => panic!("unexpected error: {:?}", e),
-        }
     }
 
     #[test]
@@ -1060,7 +1049,7 @@ mod tests {
         // No regions provided should return error.
         assert_eq!(
             format!("{:?}", GuestMemoryMmap::new(&vec![]).err().unwrap()),
-            format!("{:?}", Error::NoMemoryRegion)
+            format!("{:?}", MmapError::NoMemoryRegion)
         );
 
         let start_addr1 = GuestAddress(0x0);
@@ -1086,7 +1075,7 @@ mod tests {
         let res = GuestMemoryMmap::new(&vec![(start_addr1, 0x2000), (start_addr2, 0x2000)]);
         assert_eq!(
             format!("{:?}", res.err().unwrap()),
-            format!("{:?}", Error::MemoryRegionOverlap)
+            format!("{:?}", MmapError::MemoryRegionOverlap)
         );
     }
 
