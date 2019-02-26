@@ -152,7 +152,7 @@ impl<'a> VolatileSlice<'a> {
     }
 
     /// Gets the size of this slice.
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.size
     }
 
@@ -181,7 +181,7 @@ impl<'a> VolatileSlice<'a> {
         unsafe { Ok(VolatileSlice::new(new_addr as *mut u8, new_size)) }
     }
 
-    /// Copies `self.size()` or `buf.len()` times the size of `T` bytes, whichever is smaller, to
+    /// Copies `self.len()` or `buf.len()` times the size of `T` bytes, whichever is smaller, to
     /// `buf`.
     ///
     /// The copy happens from smallest to largest address in `T` sized chunks using volatile reads.
@@ -217,7 +217,7 @@ impl<'a> VolatileSlice<'a> {
         }
     }
 
-    /// Copies `self.size()` or `slice.size()` bytes, whichever is smaller, to `slice`.
+    /// Copies `self.len()` or `slice.len()` bytes, whichever is smaller, to `slice`.
     ///
     /// The copies happen in an undefined order.
     /// # Examples
@@ -238,7 +238,7 @@ impl<'a> VolatileSlice<'a> {
         }
     }
 
-    /// Copies `self.size()` or `buf.len()` times the size of `T` bytes, whichever is smaller, to
+    /// Copies `self.len()` or `buf.len()` times the size of `T` bytes, whichever is smaller, to
     /// this slice's memory.
     ///
     /// The copy happens from smallest to largest address in `T` sized chunks using volatile writes.
@@ -452,9 +452,9 @@ impl<'a, T: DataInit> VolatileRef<'a, T> {
     /// # use std::mem::size_of;
     /// # use memory_model::VolatileRef;
     ///   let v_ref = unsafe { VolatileRef::new(0 as *mut u32) };
-    ///   assert_eq!(v_ref.size(), size_of::<u32>() as usize);
+    ///   assert_eq!(v_ref.len(), size_of::<u32>() as usize);
     /// ```
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         size_of::<T>()
     }
 
@@ -549,7 +549,7 @@ mod tests {
         v_ref.store(0x12345678u32);
         let ref_slice = v_ref.to_slice();
         assert_eq!(v_ref.as_ptr() as usize, ref_slice.as_ptr() as usize);
-        assert_eq!(v_ref.size(), ref_slice.size());
+        assert_eq!(v_ref.len(), ref_slice.len());
     }
 
     #[test]
@@ -591,16 +591,16 @@ mod tests {
     }
 
     #[test]
-    fn slice_size() {
+    fn slice_len() {
         let a = VecMem::new(100);
         let s = a.get_slice(0, 27).unwrap();
-        assert_eq!(s.size(), 27);
+        assert_eq!(s.len(), 27);
 
         let s = a.get_slice(34, 27).unwrap();
-        assert_eq!(s.size(), 27);
+        assert_eq!(s.len(), 27);
 
         let s = s.get_slice(20, 5).unwrap();
-        assert_eq!(s.size(), 5);
+        assert_eq!(s.len(), 5);
     }
 
     #[test]

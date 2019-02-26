@@ -153,7 +153,7 @@ impl AddressRegion for MmapRegion {
     type A = MmapAddress;
     type E = Error;
 
-    fn size(&self) -> MmapAddressValue {
+    fn len(&self) -> MmapAddressValue {
         self.size
     }
 
@@ -370,7 +370,7 @@ pub struct GuestRegionMmap {
 
 impl GuestRegionMmap {
     /// Create a new memory-mapped memory region for guest's physical memory.
-    /// Note: caller needs to ensure that (mapping.size() + guest_base) doesn't wrapping around.
+    /// Note: caller needs to ensure that (mapping.len() + guest_base) doesn't wrapping around.
     pub fn new(mapping: MmapRegion, guest_base: GuestAddress) -> Self {
         GuestRegionMmap {
             mapping,
@@ -382,7 +382,7 @@ impl GuestRegionMmap {
         let offset = addr
             .checked_offset_from(self.guest_base)
             .ok_or_else(|| Error::InvalidGuestAddress(addr))?;
-        if offset >= self.size() {
+        if offset >= self.len() {
             return Err(Error::InvalidGuestAddress(addr));
         }
         Ok(MmapAddress(offset as usize))
@@ -401,8 +401,8 @@ impl AddressRegion for GuestRegionMmap {
     type A = GuestAddress;
     type E = Error;
 
-    fn size(&self) -> GuestAddressValue {
-        self.mapping.size() as GuestAddressValue
+    fn len(&self) -> GuestAddressValue {
+        self.mapping.len() as GuestAddressValue
     }
 
     fn min_addr(&self) -> GuestAddress {
@@ -412,7 +412,7 @@ impl AddressRegion for GuestRegionMmap {
     fn max_addr(&self) -> GuestAddress {
         // unchecked_add is safe as the region bounds were checked when it was created.
         self.guest_base
-            .unchecked_add(self.mapping.size() as GuestAddressValue)
+            .unchecked_add(self.mapping.len() as GuestAddressValue)
     }
 }
 
@@ -477,7 +477,7 @@ impl GuestMemoryMmap {
             if let Some(last) = regions.last() {
                 if last
                     .guest_base
-                    .checked_add(last.mapping.size() as GuestAddressValue)
+                    .checked_add(last.mapping.len() as GuestAddressValue)
                     .map_or(true, |a| a > range.0)
                 {
                     return Err(MmapError::MemoryRegionOverlap);
@@ -501,10 +501,10 @@ impl AddressRegion for GuestMemoryMmap {
     type A = GuestAddress;
     type E = Error;
 
-    fn size(&self) -> GuestAddressValue {
+    fn len(&self) -> GuestAddressValue {
         self.regions
             .iter()
-            .map(|region| region.mapping.size() as GuestAddressValue)
+            .map(|region| region.mapping.len() as GuestAddressValue)
             .sum()
     }
 
@@ -794,7 +794,7 @@ mod tests {
     #[test]
     fn basic_map() {
         let m = MmapRegion::new(1024).unwrap();
-        assert_eq!(1024, m.size());
+        assert_eq!(1024, m.len());
     }
 
     #[test]
@@ -811,10 +811,10 @@ mod tests {
     }
 
     #[test]
-    fn slice_size() {
+    fn slice_len() {
         let m = MmapRegion::new(5).unwrap();
         let s = m.get_slice(2, 3).unwrap();
-        assert_eq!(s.size(), 3);
+        assert_eq!(s.len(), 3);
     }
 
     #[test]
@@ -1069,13 +1069,13 @@ mod tests {
         let gm = GuestMemoryMmap::new(&regions).unwrap();
 
         let res: Result<()> = gm.with_regions(|_, region| {
-            assert_eq!(region.size(), region_size as GuestAddressValue);
+            assert_eq!(region.len(), region_size as GuestAddressValue);
             Ok(())
         });
         assert!(res.is_ok());
 
         let res: Result<()> = gm.with_regions_mut(|_, region| {
-            iterated_regions.push((region.min_addr(), region.size() as usize));
+            iterated_regions.push((region.min_addr(), region.len() as usize));
             Ok(())
         });
         assert!(res.is_ok());
