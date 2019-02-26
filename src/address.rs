@@ -8,29 +8,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the THIRD-PARTY file.
 
-//! Traits to access content in memory-alike byte-addressable address spaces.
+//! Traits to represent an address within an address space.
 //!
-//! Four abstractions are defined to access content within an address space, which are:
+//! Two abstractions are defined to present an address within an address space:
 //! - AddressValue: stores the raw value of an address. Typically u32, u64 or usize is used to
 //! store the raw value. But pointers, such as *u8, can't be used because it doesn't implement
 //! the Add and Sub traits.
-//! - Address: encapsulates an AddressValue object and defines methods to access it.
-//!
-//! To make the abstraction as generic as possible, all the core traits only define methods to
-//! access the address space are defined here, and they never define methods to manage (create,
-//! delete, insert, remove etc) address spaces.  By this way, the address space consumers
-//! (virtio device drivers, vhost drivers and boot loaders etc) may be decoupled from the address
-//! space provider (typically a hypervisor).
+//! - Address: encapsulates an AddressValue object and defines methods to manipulate it.
 
 use std::cmp::{Eq, Ord, PartialEq, PartialOrd};
 use std::ops::{Add, BitAnd, BitOr, Sub};
 
-/// Simple helper trait to store a raw address value.
+/// Simple helper trait used to store a raw address value.
 pub trait AddressValue {
     /// Type of the address raw value.
     type V: Copy
         + PartialEq
         + Eq
+        + PartialOrd
         + Ord
         + Add<Output = Self::V>
         + Sub<Output = Self::V>
@@ -38,16 +33,21 @@ pub trait AddressValue {
         + BitOr<Output = Self::V>;
 }
 
-/// Trait for address objects, define methods to access and manipulate it.
+/// Trait to represent an address within an address space.
 ///
-/// To simplify the design and implementation, assume the same raw data type could be used to store
-/// address, size and offset for an address space. So the Address trait will be used for address,
-/// size and offset. To ease code review, aliases may be defined though.
+/// To simplify the design and implementation, assume the same raw data type (AddressValue::V)
+/// could be used to store address, size and offset for an address space. Thus the Address trait
+/// could be used for all of address, size and offset. On the other hand, type aliases may be
+/// used to improve code readability.
+///
+/// One design rule is applied to the Address trait that operators (+, -, &, | etc) are not
+/// supported and it forces clients to explicitly invoke corresponding methods. But there are
+/// always exceptions:
+///     Address (BitAnd|BitOr) AddressValue are supported.
 pub trait Address:
     AddressValue
     + Sized
     + Default
-    + Clone
     + Copy
     + Eq
     + PartialEq
@@ -56,7 +56,7 @@ pub trait Address:
     + BitAnd<<Self as AddressValue>::V, Output = Self>
     + BitOr<<Self as AddressValue>::V, Output = Self>
 {
-    /// Create an address from the raw value.
+    /// Create an address from a raw address value.
     fn new(Self::V) -> Self;
 
     /// Get the raw value of an address.

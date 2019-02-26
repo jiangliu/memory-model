@@ -28,8 +28,9 @@ use Bytes;
 
 /// A backend driver to access guest's physical memory by mmapping guest's memory into current
 /// process.
-/// For 32-bit hypervisor and 64-bit virtual machine, only partial of guest's physical memory maybe
-/// mapped into current process due to limited process virtual address space size.
+/// For a combination of 32-bit hypervisor and 64-bit virtual machine, only partial of guest's
+/// physical memory may be mapped into current process due to limited process virtual address
+/// space size.
 #[derive(Debug)]
 pub struct MmapRegion {
     addr: *mut u8,

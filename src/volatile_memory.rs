@@ -101,11 +101,11 @@ pub trait VolatileMemory {
     /// Gets the size of this slice.
     fn len(&self) -> usize;
 
-    /// Gets a slice of memory for the entire region that supports volatile access.
-    fn get_slice(&self, offset: usize, count: usize) -> Result<VolatileSlice>;
-
     /// Gets a slice of memory at `offset` that is `count` bytes in length and supports volatile
     /// access.
+    fn get_slice(&self, offset: usize, count: usize) -> Result<VolatileSlice>;
+
+    /// Gets a slice of memory for the entire region that supports volatile access.
     fn as_volatile_slice(&self) -> VolatileSlice {
         self.get_slice(0, self.len()).unwrap()
     }
@@ -401,6 +401,7 @@ impl<'a> VolatileSlice<'a> {
     unsafe fn as_slice(&self) -> &[u8] {
         from_raw_parts(self.addr, self.size)
     }
+
     unsafe fn as_mut_slice(&self) -> &mut [u8] {
         from_raw_parts_mut(self.addr, self.size)
     }
