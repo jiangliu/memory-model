@@ -144,10 +144,6 @@ impl MmapRegion {
         }
         Ok(end)
     }
-
-    fn len(&self) -> usize {
-        self.size
-     }
 }
 
 
@@ -324,6 +320,10 @@ impl Bytes<MmapAddress> for MmapRegion {
 }
 
 impl VolatileMemory for MmapRegion {
+    fn len(&self) -> usize {
+        self.size
+    }
+
     fn get_slice(&self, offset: usize, count: usize) -> volatile_memory::Result<VolatileSlice> {
         let end = calc_offset(offset, count)?;
         if end > self.size {
