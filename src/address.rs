@@ -15,12 +15,6 @@
 //! store the raw value. But pointers, such as *u8, can't be used because it doesn't implement
 //! the Add and Sub traits.
 //! - Address: encapsulates an AddressValue object and defines methods to access it.
-//! - AddressRegion: defines methods to access content within an address region. An address region
-//! may be continuous or it may have holes within the range [min_addr, max_addr) managed by it.
-//! - AddressSpace: extends AddressRegion to build hierarchy architecture. An AnddressSpace object
-//! contains a group of non-intersected AddressRegion objects, and the contained AddressRegion
-//! object may be another AddressSpace object. By this way, a hierarchy tree may be built to
-//! describe an complex address space structure.
 //!
 //! To make the abstraction as generic as possible, all the core traits only define methods to
 //! access the address space are defined here, and they never define methods to manage (create,
@@ -157,96 +151,4 @@ macro_rules! impl_address_ops {
             }
         }
     };
-}
-
-/// A container to host content for an address range and methods to access the content.
-///
-/// An address region may be continuous or may contain holes within the range
-/// [min_addr(), max_addr()).
-///
-/// The trait provides two categories of methods to access the object:
-/// - get attribute of the region: len(), min_addr(), max_addr(), is_valid(), address_in_range()
-///   and checked_offset().
-/// - access content: read(), write(), read_slice(), write_slice(), read_obj(), write_obj(),
-/// read_from_stream(), write_to_stream().
-///
-/// Candidates implement this trait include:
-/// - anonymous memory areas
-/// - mmapped memory areas
-/// - data files
-/// - a proxy to access memory on remote
-pub trait AddressRegion {
-    /// Associated address type
-    type A: Address;
-
-    /// Associated error codes
-    type E;
-
-    /// Get size of the region, excluding possible holes.
-    fn len(&self) -> <Self::A as AddressValue>::V;
-
-    /// Get minimum (inclusive) address managed by the region.
-    fn min_addr(&self) -> Self::A {
-        Self::A::default()
-    }
-
-    /// Get maxixum (exclusive) address managed by the region.
-    fn max_addr(&self) -> Self::A {
-        Self::A::default()
-    }
-
-    /// Check whether the region is valid.
-    fn is_valid(&self) -> bool {
-        true
-    }
-
-    /// Check whether the address is managed by the region.
-    /// The default implementation assumes the address is continuous.
-    /// Address regions with holes need to provide its own implementation.
-    fn address_in_range(&self, addr: Self::A) -> bool {
-        addr >= self.min_addr() && addr < self.max_addr()
-    }
-
-    /// Returns the address plus the offset or None if it is out of range.
-    fn checked_offset(
-        &self,
-        addr: Self::A,
-        offset: <Self::A as AddressValue>::V,
-    ) -> Option<Self::A> {
-        let pos = addr.checked_add(offset)?;
-        if self.address_in_range(pos) {
-            return Some(pos);
-        }
-        None
-    }
-}
-
-/// Container for a set of AddressRegion objects and methods to access those objects.
-///
-/// The AddressSpace trait is a subtrait of the AddressRegion trait. So an AddressSpace object
-/// is itself an AddressRegion object too. That means a AddressSpace object may contain sub
-/// AddressSpace objects, and thus composes a tree hierarchy to describe a complex address space.
-///
-/// Note: all objects in an AddressSpace object must not intersect with each other.
-pub trait AddressSpace<A: Address, E>: AddressRegion<A = A, E = E> {
-    /// Type of objects hosted by the address space.
-    type T: AddressRegion<A = A, E = E>;
-
-    /// Returns the number of regions in the collection.
-    fn num_regions(&self) -> usize;
-
-    /// Return the region containing the specified address or None.
-    fn find_region(&self, A) -> Option<&Self::T>;
-
-    /// Perform the specified action on each region.
-    /// It only walks children of current region and do not step into sub regions.
-    fn with_regions<F>(&self, cb: F) -> Result<(), E>
-    where
-        F: Fn(usize, &Self::T) -> Result<(), E>;
-
-    /// Perform the specified action on each region mutably.
-    /// It only walks children of current region and do not step into sub regions.
-    fn with_regions_mut<F>(&self, cb: F) -> Result<(), E>
-    where
-        F: FnMut(usize, &Self::T) -> Result<(), E>;
 }
