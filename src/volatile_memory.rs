@@ -36,20 +36,20 @@ use DataInit;
 /// VolatileMemory related error codes
 #[allow(missing_docs)]
 #[derive(Eq, PartialEq, Debug)]
-pub enum VolatileMemoryError {
+pub enum Error {
     /// `addr` is out of bounds of the volatile memory slice.
     OutOfBounds { addr: usize },
     /// Taking a slice at `base` with `offset` would overflow `usize`.
     Overflow { base: usize, offset: usize },
 }
 
-impl fmt::Display for VolatileMemoryError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            VolatileMemoryError::OutOfBounds { addr } => {
+            Error::OutOfBounds { addr } => {
                 write!(f, "address 0x{:x} is out of bounds", addr)
             }
-            VolatileMemoryError::Overflow { base, offset } => write!(
+            Error::Overflow { base, offset } => write!(
                 f,
                 "address 0x{:x} offset by 0x{:x} would overflow",
                 base, offset
@@ -59,23 +59,20 @@ impl fmt::Display for VolatileMemoryError {
 }
 
 /// Result of volatile memory operations
-pub type VolatileMemoryResult<T> = result::Result<T, VolatileMemoryError>;
-
-use VolatileMemoryError as Error;
-type Result<T> = VolatileMemoryResult<T>;
+pub type Result<T> = result::Result<T, Error>;
 
 /// Convenience function for computing `base + offset` which returns
-/// `Err(VolatileMemoryError::Overflow)` instead of panicking in the case `base + offset` exceeds
+/// `Err(Error::Overflow)` instead of panicking in the case `base + offset` exceeds
 /// `usize::MAX`.
 ///
 /// # Examples
 ///
 /// ```
-/// # use memory_model::*;
-/// # fn get_slice(offset: usize, count: usize) -> VolatileMemoryResult<()> {
+/// # use memory_model::volatile_memory::*;
+/// # fn get_slice(offset: usize, count: usize) -> Result<()> {
 ///   let mem_end = calc_offset(offset, count)?;
 ///   if mem_end > 100 {
-///       return Err(VolatileMemoryError::OutOfBounds{addr: mem_end});
+///       return Err(Error::OutOfBounds{addr: mem_end});
 ///   }
 /// # Ok(())
 /// # }
@@ -162,12 +159,12 @@ impl<'a> VolatileSlice<'a> {
         let new_addr =
             (self.addr as usize)
                 .checked_add(count)
-                .ok_or(VolatileMemoryError::Overflow {
+                .ok_or(Error::Overflow {
                     base: self.addr as usize,
                     offset: count,
                 })?;
         if new_addr > usize::MAX {
-            return Err(VolatileMemoryError::Overflow {
+            return Err(Error::Overflow {
                 base: self.addr as usize,
                 offset: count,
             })?;
@@ -175,7 +172,7 @@ impl<'a> VolatileSlice<'a> {
         let new_size = self
             .size
             .checked_sub(count)
-            .ok_or(VolatileMemoryError::OutOfBounds { addr: new_addr })?;
+            .ok_or(Error::OutOfBounds { addr: new_addr })?;
         // Safe because the memory has the same lifetime and points to a subset of the memory of the
         // original slice.
         unsafe { Ok(VolatileSlice::new(new_addr as *mut u8, new_size)) }
