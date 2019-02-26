@@ -11,12 +11,18 @@
 
 extern crate libc;
 
+use std::io::{Read, Write};
 use std::mem::size_of;
+use std::result::Result;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
+#[cfg(test)]
 #[macro_use]
-mod address_space;
-pub use address_space::*;
+extern crate matches;
+
+#[macro_use]
+mod address;
+pub use address::*;
 
 pub mod endian;
 pub use endian::*;
@@ -39,7 +45,7 @@ pub use volatile_memory::*;
 /// any type that includes a reference.
 ///
 /// Implementing this trait guarantees that it is safe to instantiate the struct with random data.
-pub unsafe trait DataInit: Copy + Send + Sync {
+pub unsafe trait DataInit: Copy + Default + Send + Sync {
     /// Converts a slice of raw data into a reference of `Self`.
     ///
     /// The value of `data` is not copied. Instead a reference is made from the given slice. The
@@ -117,6 +123,76 @@ pub unsafe trait DataInit: Copy + Send + Sync {
         // borrowing the given mutable reference.
         unsafe { from_raw_parts_mut(self as *mut Self as *mut u8, size_of::<Self>()) }
     }
+}
+
+/// A container to host byte and access its content.
+///
+/// Candidates implement this trait include:
+/// - anonymous memory areas
+/// - mmapped memory areas
+/// - data files
+/// - a proxy to access memory on remote
+pub trait Bytes<A> {
+    /// Associated error codes
+    type E;
+
+    /// Writes a slice to the region at the specified address.
+    /// Returns the number of bytes written. The number of bytes written can
+    /// be less than the length of the slice if there isn't enough room in the
+    /// region.
+    fn write(&self, buf: &[u8], addr: A) -> Result<usize, Self::E>;
+
+    /// Reads to a slice from the region at the specified address.
+    /// Returns the number of bytes read. The number of bytes read can be less than the length
+    /// of the slice if there isn't enough room in the region.
+    fn read(&self, buf: &mut [u8], addr: A) -> Result<usize, Self::E>;
+
+    /// Writes the entire contents of a slice to the region at the specified address.
+    ///
+    /// Returns an error if there isn't enough room in the region to complete the entire write.
+    /// Part of the data may have been written nevertheless.
+    fn write_slice(&self, buf: &[u8], addr: A) -> Result<(), Self::E>;
+
+    /// Reads from the regionbat the specified address to fill the entire buffer.
+    ///
+    /// Returns an error if there isn't enough room in the region to fill the entire buffer.
+    /// Part of the buffer may have been filled nevertheless.
+    fn read_slice(&self, buf: &mut [u8], addr: A) -> Result<(), Self::E>;
+
+    /// Writes an object to the region at the specified address.
+    /// Returns Ok(()) if the object fits, or Err if it extends past the end.
+    fn write_obj<T: DataInit>(&self, val: T, addr: A) -> Result<(), Self::E> {
+        self.write_slice(val.as_slice(), addr)
+    }
+
+    /// Reads an object from the region at the given address.
+    /// Reading from a volatile area isn't strictly safe as it could change mid-read.
+    /// However, as long as the type T is plain old data and can handle random initialization,
+    /// everything will be OK.
+    fn read_obj<T: DataInit>(&self, addr: A) -> Result<T, Self::E> {
+        let mut result: T = Default::default();
+        self.read_slice(result.as_mut_slice(), addr).map(|_| { result })
+    }
+
+    /// Writes data from a readable object like a File and writes it to the region.
+    ///
+    /// # Arguments
+    /// * `addr` - Begin writing at this address.
+    /// * `src` - Read from `src` to the region.
+    /// * `count` - Read `count` bytes from `src` to the region.
+    fn write_from_stream<F>(&self, addr: A, src: &mut F, count: usize) -> Result<(), Self::E>
+    where
+        F: Read;
+
+    /// Reads data from the region to a writable object.
+    ///
+    /// # Arguments
+    /// * `addr` - Begin reading from this addr.
+    /// * `dst` - Write from the region to `dst`.
+    /// * `count` - Read `count` bytes from the region to `dst`.
+    fn read_into_stream<F>(&self, addr: A, dst: &mut F, count: usize) -> Result<(), Self::E>
+    where
+        F: Write;
 }
 
 // All intrinsic types and arrays of intrinsic types are DataInit. They are just numbers.
