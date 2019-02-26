@@ -10,8 +10,12 @@
 
 use std;
 use std::io::{self, Read, Write};
-use std::os::unix::io::AsRawFd;
-use std::ptr::null_mut;
+
+#[cfg(unix)]
+use mmap_unix::*;
+
+#[cfg(windows)]
+use mmap_windows::*;
 
 use libc;
 
@@ -60,17 +64,8 @@ impl MemoryMapping {
     pub fn new(size: usize) -> Result<MemoryMapping> {
         // This is safe because we are creating an anonymous mapping in a place not already used by
         // any other area in this process.
-        let addr = unsafe {
-            libc::mmap(
-                null_mut(),
-                size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_ANONYMOUS | libc::MAP_SHARED | libc::MAP_NORESERVE,
-                -1,
-                0,
-            )
-        };
-        if addr == libc::MAP_FAILED {
+        let addr = unsafe { map_anon_mem(size) };
+        if addr == MAP_FAILED {
             return Err(Error::SystemCallFailed(io::Error::last_os_error()));
         }
         Ok(MemoryMapping {
@@ -100,17 +95,8 @@ impl MemoryMapping {
         }
         // This is safe because we are creating a mapping in a place not already used by any other
         // area in this process.
-        let addr = unsafe {
-            libc::mmap(
-                null_mut(),
-                size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                fd.as_raw_fd(),
-                offset as libc::off_t,
-            )
-        };
-        if addr == libc::MAP_FAILED {
+        let addr = unsafe { map_shared_mem(fd, size, offset) };
+        if addr == MAP_FAILED {
             return Err(Error::SystemCallFailed(io::Error::last_os_error()));
         }
         Ok(MemoryMapping {
@@ -317,15 +303,7 @@ impl MemoryMapping {
     pub fn remove_range(&self, mem_offset: usize, count: usize) -> Result<()> {
         self.range_end(mem_offset, count)
             .map_err(|_| Error::InvalidRange(mem_offset, count))?;
-        let ret = unsafe {
-            // madvising away the region is the same as the guest changing it.
-            // Next time it is read, it may return zero pages.
-            libc::madvise(
-                (self.addr as usize + mem_offset) as *mut _,
-                count,
-                libc::MADV_REMOVE,
-            )
-        };
+        let ret = unsafe { unmap_mem((self.addr as usize + mem_offset) as *mut _, count) };
         if ret < 0 {
             Err(Error::InvalidRange(mem_offset, count))
         } else {
@@ -334,6 +312,7 @@ impl MemoryMapping {
     }
 
     /// Uses madvise to tell the kernel not to dump the specified range.
+    #[cfg(unix)]
     pub fn mark_dontdump(&self, mem_offset: usize, count: usize) -> Result<()> {
         self.range_end(mem_offset, count)
             .map_err(|_| Error::InvalidRange(mem_offset, count))?;
@@ -393,7 +372,7 @@ impl Drop for MemoryMapping {
         // This is safe because we mmap the area at addr ourselves, and nobody
         // else is holding a reference to it.
         unsafe {
-            libc::munmap(self.addr as *mut libc::c_void, self.size);
+            release_mem(self.addr as *mut libc::c_void, self.size);
         }
     }
 }
@@ -406,7 +385,10 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::mem;
+    #[cfg(unix)]
     use std::os::unix::io::FromRawFd;
+    #[cfg(windows)]
+    use std::os::windows::io::{FromRawHandle, RawHandle};
     use std::path::Path;
 
     #[test]
@@ -419,7 +401,11 @@ mod tests {
     fn map_invalid_size() {
         let res = MemoryMapping::new(0).unwrap_err();
         if let Error::SystemCallFailed(e) = res {
-            assert_eq!(e.raw_os_error(), Some(libc::EINVAL));
+            if cfg!(unix) {
+                assert_eq!(e.raw_os_error(), Some(libc::EINVAL));
+            } else {
+                assert_eq!(e.raw_os_error(), Some(87));
+            }
         } else {
             panic!("unexpected error: {:?}", res);
         }
@@ -427,10 +413,18 @@ mod tests {
 
     #[test]
     fn map_invalid_fd() {
+        #[cfg(unix)]
         let fd = unsafe { std::fs::File::from_raw_fd(-1) };
+
+        #[cfg(windows)]
+        let fd = unsafe { std::fs::File::from_raw_handle(INVALID_HANDLE) };
         let res = MemoryMapping::from_fd(&fd, 1024).unwrap_err();
         if let Error::SystemCallFailed(e) = res {
-            assert_eq!(e.raw_os_error(), Some(libc::EBADF));
+            if cfg!(unix) {
+                assert_eq!(e.raw_os_error(), Some(libc::EBADF));
+            } else {
+                assert_eq!(e.raw_os_error(), Some(0));
+            }
         } else {
             panic!("unexpected error: {:?}", res);
         }
@@ -480,7 +474,10 @@ mod tests {
 
     #[test]
     fn from_fd_offset_invalid() {
+        #[cfg(unix)]
         let fd = unsafe { std::fs::File::from_raw_fd(-1) };
+        #[cfg(windows)]
+        let fd = unsafe { std::fs::File::from_raw_handle(0 as RawHandle) };
         let res = MemoryMapping::from_fd_offset(&fd, 4096, (libc::off_t::max_value() as usize) + 1)
             .unwrap_err();
         match res {
@@ -524,7 +521,11 @@ mod tests {
     fn mem_read_and_write() {
         let mem_map = MemoryMapping::new(5).unwrap();
         assert!(mem_map.write_obj(!0u32, 1).is_ok());
-        let mut file = File::open(Path::new("/dev/zero")).unwrap();
+        let mut file = if cfg!(unix) {
+            File::open(Path::new("/dev/zero")).unwrap()
+        } else {
+            File::open(Path::new("c:\\Windows\\system32\\ntoskrnl.exe")).unwrap()
+        };
         assert!(mem_map
             .read_to_memory(2, &mut file, mem::size_of::<u32>())
             .is_err());
@@ -545,7 +546,11 @@ mod tests {
             mem_map.read_to_memory(1, &mut f, mem::size_of::<u32>())
         );
 
-        assert_eq!(mem_map.read_obj::<u32>(1).unwrap(), 0);
+        if cfg!(unix) {
+            assert_eq!(mem_map.read_obj::<u32>(1).unwrap(), 0);
+        } else {
+            assert_eq!(mem_map.read_obj::<u32>(1).unwrap(), 0x00905a4d);
+        }
 
         let mut sink = Vec::new();
         assert!(mem_map
@@ -561,7 +566,11 @@ mod tests {
             "{:?}",
             mem_map.write_from_memory(2, &mut sink, mem::size_of::<u32>())
         );
-        assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
+        if cfg!(unix) {
+            assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
+        } else {
+            assert_eq!(sink, vec![0x4d, 0x5a, 0x90, 0x00]);
+        };
     }
 
     #[test]

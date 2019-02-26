@@ -132,6 +132,12 @@ data_init_type!(i32);
 data_init_type!(i64);
 data_init_type!(isize);
 
+#[cfg(unix)]
+mod mmap_unix;
+
+#[cfg(windows)]
+mod mmap_windows;
+
 mod address_space;
 mod guest_address;
 mod guest_memory;

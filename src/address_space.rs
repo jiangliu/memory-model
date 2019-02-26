@@ -4,7 +4,12 @@
 //! Represent the physical address space of a virtual machine, which is composed
 //! by address ranges for memory and memory-mapped IO areas.
 
+#[cfg(unix)]
 use std::os::unix::io::{AsRawFd, RawFd};
+
+#[cfg(windows)]
+use mmap_windows::{AsRawFd, RawFd};
+
 use std::sync::{Arc, Mutex};
 
 use guest_address::GuestAddress;

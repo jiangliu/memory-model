@@ -718,19 +718,32 @@ mod tests {
         let gm = GuestMemory::new(&vec![(GuestAddress(0x1000), 0x400)]).unwrap();
         let addr = GuestAddress(0x1010);
         gm.write_obj_at_addr(!0u32, addr).unwrap();
+        let mut file = if cfg!(unix) {
+            File::open(Path::new("/dev/zero")).unwrap()
+        } else {
+            File::open(Path::new("c:\\Windows\\system32\\ntoskrnl.exe")).unwrap()
+        };
         gm.read_to_memory(
             addr,
-            &mut File::open(Path::new("/dev/zero")).unwrap(),
+            &mut file,
             mem::size_of::<u32>(),
         )
         .unwrap();
         let value: u32 = gm.read_obj_from_addr(addr).unwrap();
-        assert_eq!(value, 0);
+        if cfg!(unix) {
+            assert_eq!(value, 0);
+        } else {
+            assert_eq!(value, 0x00905a4d);
+        }
 
         let mut sink = Vec::new();
         gm.write_from_memory(addr, &mut sink, mem::size_of::<u32>())
             .unwrap();
-        assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
+        if cfg!(unix) {
+            assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
+        } else {
+            assert_eq!(sink, vec![0x4d, 0x5a, 0x90, 0x00]);
+        }
     }
 
     #[test]
