@@ -18,9 +18,11 @@
 //! - handle cases where an access request spanning two or more GuestMemoryRegion objects.
 
 use address::{Address, AddressValue};
+use volatile_memory;
 use std::fmt::{self, Display};
 use std::io;
 use std::ops::{BitAnd, BitOr};
+use std::convert::From;
 use Bytes;
 
 /// Errors associated with handling guest memory accesses.
@@ -40,6 +42,22 @@ pub enum Error {
     InvalidBackendAddress,
     /// Requested offset is out of range.
     InvalidBackendOffset,
+}
+
+impl From<volatile_memory::Error> for Error {
+    fn from(e: volatile_memory::Error) -> Self {
+        match e {
+            volatile_memory::Error::OutOfBounds { addr: _ } =>
+                Error::InvalidBackendAddress,
+            volatile_memory::Error::Overflow { base: _, offset: _ } =>
+                Error::InvalidBackendAddress,
+            volatile_memory::Error::IOError(e) =>
+                Error::IOError(e),
+            volatile_memory::Error::PartialBuffer { expected, completed } =>
+                Error::PartialBuffer { expected: expected as u64, completed: completed as u64 }
+
+        }
+    }
 }
 
 /// Result of guest memory operations
