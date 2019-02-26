@@ -199,9 +199,9 @@ pub trait GuestMemory {
     {
         let mut cur = addr;
         let mut total = 0;
-        while total < count {
+        loop {
             if let Some(region) = self.find_region(cur) {
-                let start = region.to_region_addr(cur)?;
+                let start = region.to_region_addr(cur).unwrap();
                 let cap = region.len() as usize;
                 let len = std::cmp::min(cap, count - total);
                 match f(total, len, start, region) {
@@ -209,17 +209,20 @@ pub trait GuestMemory {
                     Ok(0) => break,
                     // made some progress
                     Ok(len) => {
+                        total += len;
+                        if total == count {
+                            break
+                        }
                         cur = cur
                             .checked_add(len as GuestAddressValue)
-                            .ok_or_else(|| Error::InvalidGuestAddress(cur))?;
-                        total += len;
+                            .unwrap();
                     }
                     // error happened
                     e => return e,
                 }
             } else {
                 // no region for address found
-                break;
+                break
             }
         }
         if total == 0 {
