@@ -15,8 +15,6 @@ To be hypervisor neutral, the high level abstraction has been heavily refactored
 Build generic abstractions to describe and access an address space as below:
 - AddressValue: stores the raw value of an address. Typically u32, u64 or usize is used to store the raw value. But pointers, such as \*u8, can't be used because it doesn't implement the Add and Sub traits.
 - Address: encapsulates an AddressValue object and defines methods to access it.
-- AddressRegion: defines methods to access content within an address region. An address region may be continuous or it may have holes within the range [min\_addr, max\_addr) managed by it.
-- AddressSpace: extends AddressRegion to build hierarchy architecture. An AnddressSpace object contains a group of non-intersected AddressRegion objects, and the contained AddressRegion object may be another AddressSpace object. By this way, a hierarchy tree may be built to describe an complex address space structure.
 
 To make the abstraction as generic as possible, all the core traits only define methods to access the address space are defined here, and they never define methods to manage (create, delete, insert, remove etc) address spaces. By this way, the address space consumers (virtio device drivers, vhost-user drivers and boot loaders etc) may be decoupled from the address space provider (typically a hypervisor).
 
@@ -25,7 +23,7 @@ The generic address space crates are specialized to access guest's physical memo
 - GuestAddress: represents a guest physical address (GPA). On ARM64, a 32-bit hypervisor may be used to support a 64-bit guest. For simplicity, u64 is used to store the the raw value no matter the guest a 32-bit or 64-bit virtual machine.
 - GuestMemoryRegion: used to represent a continuous region of guest's physical memory.
 - GuestMemory: used to represent a collection of GuestMemoryRegion objects. The main responsibilities of the GuestMemory trait are:
-	- hide the detail of accessing guest's physical address.
+	- hide the detail of accessing guest's physical address (for example complex hierarchical structures).
 	- map a request address to a GuestMemoryRegion object and relay the request to it.
 	- handle cases where an access request spanning two or more GuestMemoryRegion objects.
 
@@ -55,22 +53,25 @@ One of the main responsibilities of the GuestMemoryMmap object is to handle the 
 
 ### Utilities and Helpers
 Following utility and helper traits/macros are imported from the [crosvm project](https://chromium.googlesource.com/chromiumos/platform/crosvm/) with minor changes:
+- Bytes: Common trait for volatile access to memory.  The `Bytes` trait can be parameterized with newtypes that represent addresses, in order to enforce that addresses are used with the right "kind" of volatile memory.
 - DataInit: Types for which it is safe to initialize from raw data. A type `T` is `DataInit` if and only if it can be initialized by reading its contents from a byte array. This is generally true for all plain-old-data structs.  It is notably not true for any type that includes a reference.
 - {Le,Be}\_{16,32,64}: Explicit endian types useful for embedding in structs or reinterpreting data.
-- VolatileMemory: Types for volatile access to memory.
+- VolatileMemory: Basic implementation of volatile access to memory, implements `Bytes<usize>`.
 
 ### Relationship among Traits and Structs
-- AddressValue
-- Address
-- AddressRegion
-- AddressSpace: AddressRegion
+traits:
+- GuestMemoryRegion: Bytes<MemoryRegionAddress, E = Error> (must be implemented)
+- GuestMemory: Bytes<GuestAddress> (generic implementation)
+
+newtypes:
 - GuestAddress: Address\<u64\>
-- GuestMemoryRegion: AddressRegion<A = GuestAddress, E = Error>
-- GuestMemory: AddressSpace<GuestAddress, Error> + AddressRegion<A = GuestAddress, E = Error>
-- MmapAddress: Address\<usize\>
-- MmapRegion: AddressRegion<A = MmapAddress, E = Error>
-- GuestRegionMmap: AddressRegion<A = GuestAddress, E = Error> + GuestMemoryRegion
-- GuestMemoryMmap: AddressSpace<GuestAddress, Error> + AddressRegion<A = GuestAddress, E = Error> + GuestMemoryRegion + GuestMemory
+- MemoryRegionAddress: Address\<u64\>
+
+structs:
+- MmapRegion: VolatileMemory
+- GuestRegionMmap: GuestMemoryRegion
+- GuestMemoryMmap: GuestMemory
+- VolatileSlice: Bytes<usize, E = volatile_memory::Error>
 
 # Usage
 First, add the following to your `Cargo.toml`:
