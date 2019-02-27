@@ -180,6 +180,16 @@ impl GuestRegionMmap {
 impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     type E = Error;
 
+    /// # Examples
+    /// * Write a slice at guest address 0x1200.
+    ///
+    /// ```
+    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
+    /// # let start_addr = GuestAddress(0x1000);
+    /// # let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
+    ///   let res = gm.write(&[1,2,3,4,5], GuestAddress(0x1200)).unwrap();
+    ///   assert_eq!(5, res);
+    /// ```
     fn write(&self, buf: &[u8], addr: MemoryRegionAddress) -> Result<usize> {
         let maddr = addr.raw_value() as usize;
         self.as_volatile_slice()
@@ -187,6 +197,17 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
             .map_err(Into::into)
     }
 
+    /// # Examples
+    /// * Read a slice of length 16 at guestaddress 0x1200.
+    ///
+    /// ```
+    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
+    /// # let start_addr = GuestAddress(0x1000);
+    /// # let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
+    ///   let buf = &mut [0u8; 16];
+    ///   let res = gm.read(buf, GuestAddress(0x1200)).unwrap();
+    ///   assert_eq!(16, res);
+    /// ```
     fn read(&self, buf: &mut [u8], addr: MemoryRegionAddress) -> Result<usize> {
         let maddr = addr.raw_value() as usize;
         self.as_volatile_slice()
@@ -208,6 +229,22 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
             .map_err(Into::into)
     }
 
+    /// # Examples
+    ///
+    /// * Read bytes from /dev/urandom
+    ///
+    /// ```
+    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use std::fs::File;
+    /// # use std::path::Path;
+    /// # let start_addr = GuestAddress(0x1000);
+    /// # let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
+    ///   let mut file = File::open(Path::new("/dev/urandom")).unwrap();
+    ///   let addr = GuestAddress(0x1010);
+    ///   gm.write_from_stream(addr, &mut file, 128).unwrap();
+    ///   let read_addr = addr.checked_add(8).unwrap();
+    ///   let _: u32 = gm.read_obj(read_addr).unwrap();
+    /// ```
     fn write_from_stream<F>(
         &self,
         addr: MemoryRegionAddress,
@@ -223,6 +260,21 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
             .map_err(Into::into)
     }
 
+    /// Reads data from the region to a writable object.
+    ///
+    /// # Examples
+    ///
+    /// * Write 128 bytes to /dev/null
+    ///
+    /// ```
+    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use std::fs::File;
+    /// # use std::path::Path;
+    /// # let start_addr = GuestAddress(0x1000);
+    /// # let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
+    ///   let mut file = File::open(Path::new("/dev/null")).unwrap();
+    ///   gm.read_into_stream(start_addr, &mut file, 128).unwrap();
+    /// ```
     fn read_into_stream<F>(
         &self,
         addr: MemoryRegionAddress,

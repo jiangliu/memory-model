@@ -235,19 +235,6 @@ pub trait GuestMemory {
 impl<T: GuestMemory> Bytes<GuestAddress> for T {
     type E = Error;
 
-    /// # Examples
-    /// * Write a slice at guestaddress 0x200.
-    ///
-    /// ```
-    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
-    /// # fn test_write_u64() -> Result<(), ()> {
-    /// #   let start_addr = GuestAddress(0x1000);
-    /// #   let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).map_err(|_| ())?;
-    ///     let res = gm.write(&[1,2,3,4,5], GuestAddress(0x200)).map_err(|_| ())?;
-    ///     assert_eq!(5, res);
-    ///     Ok(())
-    /// # }
-    /// ```
     fn write(&self, buf: &[u8], addr: GuestAddress) -> Result<usize> {
         self.try_access(
             buf.len(),
@@ -261,20 +248,6 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
         )
     }
 
-    /// # Examples
-    /// * Read a slice of length 16 at guestaddress 0x200.
-    ///
-    /// ```
-    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
-    /// # fn test_write_u64() -> Result<(), ()> {
-    /// #   let start_addr = GuestAddress(0x1000);
-    /// #   let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).map_err(|_| ())?;
-    ///     let buf = &mut [0u8; 16];
-    ///     let res = gm.read(buf, GuestAddress(0x200)).map_err(|_| ())?;
-    ///     assert_eq!(16, res);
-    ///     Ok(())
-    /// # }
-    /// ```
     fn read(&self, buf: &mut [u8], addr: GuestAddress) -> Result<usize> {
         self.try_access(
             buf.len(),
@@ -328,25 +301,6 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
         Ok(())
     }
 
-    /// # Examples
-    ///
-    /// * Read bytes from /dev/urandom
-    ///
-    /// ```
-    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
-    /// # use std::fs::File;
-    /// # use std::path::Path;
-    /// # fn test_read_random() -> Result<u32, ()> {
-    /// #     let start_addr = GuestAddress(0x1000);
-    /// #     let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).map_err(|_| ())?;
-    ///       let mut file = File::open(Path::new("/dev/urandom")).map_err(|_| ())?;
-    ///       let addr = GuestAddress(0x1010);
-    ///       gm.write_from_stream(addr, &mut file, 128).map_err(|_| ())?;
-    ///       let read_addr = addr.checked_add(8).ok_or(())?;
-    ///       let rand_val: u32 = gm.read_obj(read_addr).map_err(|_| ())?;
-    /// #     Ok(rand_val)
-    /// # }
-    /// ```
     fn write_from_stream<F>(&self, addr: GuestAddress, src: &mut F, count: usize) -> Result<()>
     where
         F: Read,
@@ -381,24 +335,6 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
         Ok(())
     }
 
-    /// Reads data from the region to a writable object.
-    ///
-    /// # Examples
-    ///
-    /// * Write 128 bytes to /dev/null
-    ///
-    /// ```
-    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
-    /// # use std::fs::File;
-    /// # use std::path::Path;
-    /// # fn test_write_null() -> Result<(), ()> {
-    /// #     let start_addr = GuestAddress(0x1000);
-    /// #     let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).map_err(|_| ())?;
-    ///       let mut file = File::open(Path::new("/dev/null")).map_err(|_| ())?;
-    ///       gm.read_into_stream(start_addr, &mut file, 128).map_err(|_| ())?;
-    /// #     Ok(())
-    /// # }
-    /// ```
     fn read_into_stream<F>(&self, addr: GuestAddress, dst: &mut F, count: usize) -> Result<()>
     where
         F: Write,
