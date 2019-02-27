@@ -269,11 +269,11 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     ///
     /// ```
     /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
-    /// # use std::fs::File;
-    /// # use std::path::Path;
+    /// # use std::fs::OpenOptions;
     /// # let start_addr = GuestAddress(0x1000);
     /// # let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
-    ///   let mut file = File::open(Path::new("/dev/null")).unwrap();
+    ///   let mut file = OpenOptions::new().write(true).open("/dev/null").unwrap();
+    ///   let mut mem = [0u8; 1024];
     ///   gm.read_into_stream(start_addr, &mut file, 128).unwrap();
     /// ```
     fn read_into_stream<F>(
