@@ -45,29 +45,23 @@ pub enum Error {
     /// Writing to memory failed
     IOError(io::Error),
     /// Incomplete read or write
-    PartialBuffer {
-        expected: usize,
-        completed: usize,
-    },
+    PartialBuffer { expected: usize, completed: usize },
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::OutOfBounds { addr } => {
-                write!(f, "address 0x{:x} is out of bounds", addr)
-            }
+            Error::OutOfBounds { addr } => write!(f, "address 0x{:x} is out of bounds", addr),
             Error::Overflow { base, offset } => write!(
                 f,
                 "address 0x{:x} offset by 0x{:x} would overflow",
                 base, offset
             ),
-            Error::IOError(error) => write!(
-                f,
-                "{}",
-                error
-            ),
-            Error::PartialBuffer { expected, completed } => write!(
+            Error::IOError(error) => write!(f, "{}", error),
+            Error::PartialBuffer {
+                expected,
+                completed,
+            } => write!(
                 f,
                 "only used {} bytes in {} long buffer",
                 completed, expected
@@ -182,13 +176,12 @@ impl<'a> VolatileSlice<'a> {
     /// Creates a copy of this slice with the address increased by `count` bytes, and the size
     /// reduced by `count` bytes.
     pub fn offset(self, count: usize) -> Result<VolatileSlice<'a>> {
-        let new_addr =
-            (self.addr as usize)
-                .checked_add(count)
-                .ok_or(Error::Overflow {
-                    base: self.addr as usize,
-                    offset: count,
-                })?;
+        let new_addr = (self.addr as usize)
+            .checked_add(count)
+            .ok_or(Error::Overflow {
+                base: self.addr as usize,
+                offset: count,
+            })?;
         if new_addr > usize::MAX {
             return Err(Error::Overflow {
                 base: self.addr as usize,
@@ -905,15 +898,11 @@ mod tests {
         let a = VecMem::new(5);
         let s = a.as_volatile_slice();
         assert!(s.write_obj(55u16, 4).is_err());
-        assert!(s
-            .write_obj(55u16, core::usize::MAX)
-            .is_err());
+        assert!(s.write_obj(55u16, core::usize::MAX).is_err());
         assert!(s.write_obj(55u16, 2).is_ok());
         assert_eq!(s.read_obj::<u16>(2).unwrap(), 55u16);
         assert!(s.read_obj::<u16>(4).is_err());
-        assert!(s
-            .read_obj::<u16>(core::usize::MAX)
-            .is_err());
+        assert!(s.read_obj::<u16>(core::usize::MAX).is_err());
     }
 
     #[test]
@@ -922,50 +911,26 @@ mod tests {
         let s = a.as_volatile_slice();
         assert!(s.write_obj(!0u32, 1).is_ok());
         let mut file = File::open(Path::new("/dev/zero")).unwrap();
+        assert!(s.write_from_stream(2, &mut file, size_of::<u32>()).is_err());
         assert!(s
-            .write_from_stream(2, &mut file, size_of::<u32>())
-            .is_err());
-        assert!(s
-            .write_from_stream(
-                core::usize::MAX,
-                &mut file,
-                size_of::<u32>()
-            )
+            .write_from_stream(core::usize::MAX, &mut file, size_of::<u32>())
             .is_err());
 
-        assert!(s
-            .write_from_stream(1, &mut file, size_of::<u32>())
-            .is_ok());
+        assert!(s.write_from_stream(1, &mut file, size_of::<u32>()).is_ok());
 
         let mut f = tempfile().unwrap();
-        assert!(s
-            .write_from_stream(1, &mut f, size_of::<u32>())
-            .is_err());
-        format!(
-            "{:?}",
-            s.write_from_stream(1, &mut f, size_of::<u32>())
-        );
+        assert!(s.write_from_stream(1, &mut f, size_of::<u32>()).is_err());
+        format!("{:?}", s.write_from_stream(1, &mut f, size_of::<u32>()));
 
         assert_eq!(s.read_obj::<u32>(1).unwrap(), 0);
 
         let mut sink = Vec::new();
+        assert!(s.read_into_stream(1, &mut sink, size_of::<u32>()).is_ok());
+        assert!(s.read_into_stream(2, &mut sink, size_of::<u32>()).is_err());
         assert!(s
-            .read_into_stream(1, &mut sink, size_of::<u32>())
-            .is_ok());
-        assert!(s
-            .read_into_stream(2, &mut sink, size_of::<u32>())
+            .read_into_stream(core::usize::MAX, &mut sink, size_of::<u32>())
             .is_err());
-        assert!(s
-            .read_into_stream(
-                core::usize::MAX,
-                &mut sink,
-                size_of::<u32>()
-            )
-            .is_err());
-        format!(
-            "{:?}",
-            s.read_into_stream(2, &mut sink, size_of::<u32>())
-        );
+        format!("{:?}", s.read_into_stream(2, &mut sink, size_of::<u32>()));
         assert_eq!(sink, vec![0; size_of::<u32>()]);
     }
 }

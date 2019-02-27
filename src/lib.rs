@@ -171,7 +171,7 @@ pub trait Bytes<A> {
     /// everything will be OK.
     fn read_obj<T: DataInit>(&self, addr: A) -> Result<T, Self::E> {
         let mut result: T = Default::default();
-        self.read_slice(result.as_mut_slice(), addr).map(|_| { result })
+        self.read_slice(result.as_mut_slice(), addr).map(|_| result)
     }
 
     /// Writes data from a readable object like a File and writes it to the region.

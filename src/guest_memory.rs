@@ -18,11 +18,11 @@
 //! - handle cases where an access request spanning two or more GuestMemoryRegion objects.
 
 use address::{Address, AddressValue};
-use volatile_memory;
+use std::convert::From;
 use std::fmt::{self, Display};
 use std::io::{self, Read, Write};
 use std::ops::{BitAnd, BitOr};
-use std::convert::From;
+use volatile_memory;
 
 use Bytes;
 
@@ -37,10 +37,7 @@ pub enum Error {
     /// Couldn't read/write from the given source.
     IOError(io::Error),
     /// Incomplete read or write
-    PartialBuffer {
-        expected: usize,
-        completed: usize,
-    },
+    PartialBuffer { expected: usize, completed: usize },
     /// Requested backend address is out of range.
     InvalidBackendAddress,
     /// Requested offset is out of range.
@@ -50,15 +47,16 @@ pub enum Error {
 impl From<volatile_memory::Error> for Error {
     fn from(e: volatile_memory::Error) -> Self {
         match e {
-            volatile_memory::Error::OutOfBounds { addr: _ } =>
-                Error::InvalidBackendAddress,
-            volatile_memory::Error::Overflow { base: _, offset: _ } =>
-                Error::InvalidBackendAddress,
-            volatile_memory::Error::IOError(e) =>
-                Error::IOError(e),
-            volatile_memory::Error::PartialBuffer { expected, completed } =>
-                Error::PartialBuffer { expected: expected, completed: completed }
-
+            volatile_memory::Error::OutOfBounds { addr: _ } => Error::InvalidBackendAddress,
+            volatile_memory::Error::Overflow { base: _, offset: _ } => Error::InvalidBackendAddress,
+            volatile_memory::Error::IOError(e) => Error::IOError(e),
+            volatile_memory::Error::PartialBuffer {
+                expected,
+                completed,
+            } => Error::PartialBuffer {
+                expected: expected,
+                completed: completed,
+            },
         }
     }
 }
@@ -137,7 +135,6 @@ pub trait GuestMemoryRegion: Bytes<MemoryRegionAddress, E = Error> {
         Ok(MemoryRegionAddress(offset))
     }
 
-
     /// Return a slice corresponding to the data in the region; unsafe because of
     /// possible aliasing.  Return None if the region does not support slice-based
     /// access.
@@ -211,20 +208,20 @@ pub trait GuestMemory {
                     Ok(len) => {
                         total += len;
                         if total == count {
-                            break
+                            break;
                         }
                         cur = match cur.overflowing_add(len as GuestAddressValue) {
                             (GuestAddress(0), _) => GuestAddress(0),
                             (result, false) => result,
-                            (_, true) => panic!("guest address overflow")
+                            (_, true) => panic!("guest address overflow"),
                         }
-                    },
+                    }
                     // error happened
                     e => return e,
                 }
             } else {
                 // no region for address found
-                break
+                break;
             }
         }
         if total == 0 {
@@ -363,7 +360,8 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
                 // This is safe cause `start` and `len` are within the `region`.
                 let start = caddr.raw_value() as usize;
                 let end = start + len;
-                src.read_exact(&mut dst[start..end]).map_err(Error::IOError)?;
+                src.read_exact(&mut dst[start..end])
+                    .map_err(Error::IOError)?;
                 Ok(len)
             } else {
                 let len = std::cmp::min(len, MAX_ACCESS_CHUNK);
@@ -417,7 +415,8 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
                 // It is safe to read from volatile memory. Accessing the guest
                 // memory as a slice is OK because nothing assumes another thread
                 // won't change what is loaded.
-                dst.write_all(&src[start as usize..end]).map_err(Error::IOError)?;
+                dst.write_all(&src[start as usize..end])
+                    .map_err(Error::IOError)?;
                 Ok(len)
             } else {
                 let len = std::cmp::min(len, MAX_ACCESS_CHUNK);

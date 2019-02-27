@@ -182,38 +182,60 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
 
     fn write(&self, buf: &[u8], addr: MemoryRegionAddress) -> Result<usize> {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().write(buf, maddr).map_err(Into::into)
+        self.as_volatile_slice()
+            .write(buf, maddr)
+            .map_err(Into::into)
     }
 
     fn read(&self, buf: &mut [u8], addr: MemoryRegionAddress) -> Result<usize> {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().read(buf, maddr).map_err(Into::into)
+        self.as_volatile_slice()
+            .read(buf, maddr)
+            .map_err(Into::into)
     }
 
     fn write_slice(&self, buf: &[u8], addr: MemoryRegionAddress) -> Result<()> {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().write_slice(buf, maddr).map_err(Into::into)
+        self.as_volatile_slice()
+            .write_slice(buf, maddr)
+            .map_err(Into::into)
     }
 
     fn read_slice(&self, buf: &mut [u8], addr: MemoryRegionAddress) -> Result<()> {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().read_slice(buf, maddr).map_err(Into::into)
+        self.as_volatile_slice()
+            .read_slice(buf, maddr)
+            .map_err(Into::into)
     }
 
-    fn write_from_stream<F>(&self, addr: MemoryRegionAddress, src: &mut F, count: usize) -> Result<()>
+    fn write_from_stream<F>(
+        &self,
+        addr: MemoryRegionAddress,
+        src: &mut F,
+        count: usize,
+    ) -> Result<()>
     where
         F: Read,
     {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().write_from_stream::<F>(maddr, src, count).map_err(Into::into)
+        self.as_volatile_slice()
+            .write_from_stream::<F>(maddr, src, count)
+            .map_err(Into::into)
     }
 
-    fn read_into_stream<F>(&self, addr: MemoryRegionAddress, dst: &mut F, count: usize) -> Result<()>
+    fn read_into_stream<F>(
+        &self,
+        addr: MemoryRegionAddress,
+        dst: &mut F,
+        count: usize,
+    ) -> Result<()>
     where
         F: Write,
     {
         let maddr = addr.raw_value() as usize;
-        self.as_volatile_slice().read_into_stream::<F>(maddr, dst, count).map_err(Into::into)
+        self.as_volatile_slice()
+            .read_into_stream::<F>(maddr, dst, count)
+            .map_err(Into::into)
     }
 }
 
@@ -261,7 +283,7 @@ impl GuestMemoryMmap {
                 }
             }
 
-            let mapping = MmapRegion::new(range.1).map_err(|e| { MmapError::SystemCallFailed(e) })?;
+            let mapping = MmapRegion::new(range.1).map_err(|e| MmapError::SystemCallFailed(e))?;
             regions.push(GuestRegionMmap {
                 mapping,
                 guest_base: range.0,
@@ -358,7 +380,10 @@ mod tests {
 
         let mem_map = MmapRegion::from_fd(&f, sample_buf.len(), 0).unwrap();
         let buf = &mut [0u8; 16];
-        assert_eq!(mem_map.as_volatile_slice().read(buf, 0).unwrap(), sample_buf.len());
+        assert_eq!(
+            mem_map.as_volatile_slice().read(buf, 0).unwrap(),
+            sample_buf.len()
+        );
         assert_eq!(buf[0..sample_buf.len()], sample_buf[..]);
     }
 
@@ -406,16 +431,15 @@ mod tests {
         let val2: u64 = 0x55aa55aa55aa55aa;
         assert_eq!(
             format!("{:?}", gm.write_obj(val1, bad_addr).err().unwrap()),
-            format!(
-                "InvalidGuestAddress({:?})",
-                bad_addr,
-            )
+            format!("InvalidGuestAddress({:?})", bad_addr,)
         );
         assert_eq!(
             format!("{:?}", gm.write_obj(val1, bad_addr2).err().unwrap()),
-            format!("PartialBuffer {{ expected: {:?}, completed: {:?} }}",
-                    mem::size_of::<u64>(),
-                    max_addr.checked_offset_from(bad_addr2).unwrap())
+            format!(
+                "PartialBuffer {{ expected: {:?}, completed: {:?} }}",
+                mem::size_of::<u64>(),
+                max_addr.checked_offset_from(bad_addr2).unwrap()
+            )
         );
 
         gm.write_obj(val1, GuestAddress(0x500)).unwrap();
