@@ -101,6 +101,11 @@ pub trait VolatileMemory {
     /// Gets the size of this slice.
     fn len(&self) -> usize;
 
+    /// Check whether the region is empty.
+    fn is_empty(&self) -> bool {
+        self.len() != 0
+    }
+
     /// Gets a slice of memory at `offset` that is `count` bytes in length and supports volatile
     /// access.
     fn get_slice(&self, offset: usize, count: usize) -> Result<VolatileSlice>;
@@ -173,6 +178,11 @@ impl<'a> VolatileSlice<'a> {
         self.size
     }
 
+    /// Check whether the slice is empty.
+    pub fn is_empty(&self) -> bool {
+        self.size != 0
+    }
+
     /// Creates a copy of this slice with the address increased by `count` bytes, and the size
     /// reduced by `count` bytes.
     pub fn offset(self, count: usize) -> Result<VolatileSlice<'a>> {
@@ -182,12 +192,6 @@ impl<'a> VolatileSlice<'a> {
                 base: self.addr as usize,
                 offset: count,
             })?;
-        if new_addr > usize::MAX {
-            return Err(Error::Overflow {
-                base: self.addr as usize,
-                offset: count,
-            })?;
-        }
         let new_size = self
             .size
             .checked_sub(count)

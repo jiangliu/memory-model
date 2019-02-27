@@ -55,15 +55,15 @@ pub enum Error {
 impl From<volatile_memory::Error> for Error {
     fn from(e: volatile_memory::Error) -> Self {
         match e {
-            volatile_memory::Error::OutOfBounds { addr: _ } => Error::InvalidBackendAddress,
-            volatile_memory::Error::Overflow { base: _, offset: _ } => Error::InvalidBackendAddress,
+            volatile_memory::Error::OutOfBounds { .. } => Error::InvalidBackendAddress,
+            volatile_memory::Error::Overflow { .. } => Error::InvalidBackendAddress,
             volatile_memory::Error::IOError(e) => Error::IOError(e),
             volatile_memory::Error::PartialBuffer {
                 expected,
                 completed,
             } => Error::PartialBuffer {
-                expected: expected,
-                completed: completed,
+                expected,
+                completed,
             },
         }
     }
@@ -120,6 +120,11 @@ pub type GuestAddressOffset = <GuestAddress as AddressValue>::V;
 pub trait GuestMemoryRegion: Bytes<MemoryRegionAddress, E = Error> {
     /// Get the size of the region.
     fn len(&self) -> GuestAddressValue;
+
+    /// Check wheather the region is empty.
+    fn is_empty(&self) -> bool {
+        self.len() != 0
+    }
 
     /// Get minimum (inclusive) address managed by the region.
     fn min_addr(&self) -> GuestAddress;
@@ -202,32 +207,27 @@ pub trait GuestMemory {
     {
         let mut cur = addr;
         let mut total = 0;
-        loop {
-            if let Some(region) = self.find_region(cur) {
-                let start = region.to_region_addr(cur).unwrap();
-                let cap = region.len() as usize;
-                let len = std::cmp::min(cap, count - total);
-                match f(total, len, start, region) {
-                    // no more data
-                    Ok(0) => break,
-                    // made some progress
-                    Ok(len) => {
-                        total += len;
-                        if total == count {
-                            break;
-                        }
-                        cur = match cur.overflowing_add(len as GuestAddressValue) {
-                            (GuestAddress(0), _) => GuestAddress(0),
-                            (result, false) => result,
-                            (_, true) => panic!("guest address overflow"),
-                        }
+        while let Some(region) = self.find_region(cur) {
+            let start = region.to_region_addr(cur).unwrap();
+            let cap = region.len() as usize;
+            let len = std::cmp::min(cap, count - total);
+            match f(total, len, start, region) {
+                // no more data
+                Ok(0) => break,
+                // made some progress
+                Ok(len) => {
+                    total += len;
+                    if total == count {
+                        break;
                     }
-                    // error happened
-                    e => return e,
+                    cur = match cur.overflowing_add(len as GuestAddressValue) {
+                        (GuestAddress(0), _) => GuestAddress(0),
+                        (result, false) => result,
+                        (_, true) => panic!("guest address overflow"),
+                    }
                 }
-            } else {
-                // no region for the address found
-                break;
+                // error happened
+                e => return e,
             }
         }
         if total == 0 {
@@ -357,8 +357,7 @@ impl<T: GuestMemory> Bytes<GuestAddress> for T {
                 // It is safe to read from volatile memory. Accessing the guest
                 // memory as a slice is OK because nothing assumes another thread
                 // won't change what is loaded.
-                dst.write_all(&src[start as usize..end])
-                    .map_err(Error::IOError)?;
+                dst.write_all(&src[start..end]).map_err(Error::IOError)?;
                 Ok(len)
             } else {
                 let len = std::cmp::min(len, MAX_ACCESS_CHUNK);

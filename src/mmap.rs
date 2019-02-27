@@ -484,7 +484,7 @@ mod tests {
         let val2: u64 = 0x55aa55aa55aa55aa;
         assert_eq!(
             format!("{:?}", gm.write_obj(val1, bad_addr).err().unwrap()),
-            format!("InvalidGuestAddress({:?})", bad_addr,)
+            format!("InvalidGuestAddress({:?})", bad_addr)
         );
         assert_eq!(
             format!("{:?}", gm.write_obj(val1, bad_addr2).err().unwrap()),
