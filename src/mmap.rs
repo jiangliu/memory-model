@@ -79,8 +79,8 @@ impl MemoryMapping {
     /// # Arguments
     /// * `fd` - File descriptor to mmap from.
     /// * `size` - Size of memory region in bytes.
-    pub fn from_fd(fd: &AsRawFd, size: usize) -> Result<MemoryMapping> {
-        MemoryMapping::from_fd_offset(fd, size, 0)
+    pub fn from_file(fd: &AsRawFile, size: usize) -> Result<MemoryMapping> {
+        MemoryMapping::from_file_offset(fd, size, 0)
     }
 
     /// Maps the `size` bytes starting at `offset` bytes of the given `fd`.
@@ -89,7 +89,7 @@ impl MemoryMapping {
     /// * `fd` - File descriptor to mmap from.
     /// * `size` - Size of memory region in bytes.
     /// * `offset` - Offset in bytes from the beginning of `fd` to start the mmap.
-    pub fn from_fd_offset(fd: &AsRawFd, size: usize, offset: usize) -> Result<MemoryMapping> {
+    pub fn from_file_offset(fd: &AsRawFile, size: usize, offset: usize) -> Result<MemoryMapping> {
         if offset > libc::off_t::max_value() as usize {
             return Err(Error::InvalidOffset);
         }
@@ -418,7 +418,7 @@ mod tests {
 
         #[cfg(windows)]
         let fd = unsafe { std::fs::File::from_raw_handle(INVALID_HANDLE) };
-        let res = MemoryMapping::from_fd(&fd, 1024).unwrap_err();
+        let res = MemoryMapping::from_file(&fd, 1024).unwrap_err();
         if let Error::SystemCallFailed(e) = res {
             if cfg!(unix) {
                 assert_eq!(e.raw_os_error(), Some(libc::EBADF));
@@ -478,7 +478,7 @@ mod tests {
         let fd = unsafe { std::fs::File::from_raw_fd(-1) };
         #[cfg(windows)]
         let fd = unsafe { std::fs::File::from_raw_handle(0 as RawHandle) };
-        let res = MemoryMapping::from_fd_offset(&fd, 4096, (libc::off_t::max_value() as usize) + 1)
+        let res = MemoryMapping::from_file_offset(&fd, 4096, (libc::off_t::max_value() as usize) + 1)
             .unwrap_err();
         match res {
             Error::InvalidOffset => {}
@@ -579,7 +579,7 @@ mod tests {
         let sample_buf = &[1, 2, 3, 4, 5];
         assert!(f.write_all(sample_buf).is_ok());
 
-        let mem_map = MemoryMapping::from_fd(&f, sample_buf.len()).unwrap();
+        let mem_map = MemoryMapping::from_file(&f, sample_buf.len()).unwrap();
         let buf = &mut [0u8; 16];
         assert_eq!(mem_map.read_slice(buf, 0).unwrap(), sample_buf.len());
         assert_eq!(buf[0..sample_buf.len()], sample_buf[..]);

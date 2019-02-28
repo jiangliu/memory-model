@@ -45,13 +45,13 @@ extern "stdcall" {
     pub fn CloseHandle(hObject: RawHandle) -> u32; // BOOL
 }
 
-pub type RawFd = std::os::windows::io::RawHandle;
-pub trait AsRawFd {
-    fn as_raw_fd(&self) -> RawFd;
+pub type RawFile = std::os::windows::io::RawHandle;
+pub trait AsRawFile {
+    fn as_raw_file(&self) -> RawFile;
 }
 
-impl AsRawFd for std::fs::File {
-    fn as_raw_fd(&self) -> RawFd {
+impl AsRawFile for std::fs::File {
+    fn as_raw_file(&self) -> RawFile {
         self.as_raw_handle()
     }
 }
@@ -68,8 +68,8 @@ pub unsafe fn map_anon_mem(size: usize) -> *mut c_void {
     return VirtualAlloc(0 as *mut c_void, size, MEM_COMMIT, PAGE_READWRITE);
 }
 
-pub unsafe fn map_shared_mem(file: &AsRawFd, size: usize, offset: usize) -> *mut c_void {
-    let handle = file.as_raw_fd();
+pub unsafe fn map_shared_mem(file: &AsRawFile, size: usize, offset: usize) -> *mut c_void {
+    let handle = file.as_raw_file();
     if handle == INVALID_HANDLE {
         return MAP_FAILED;
     }

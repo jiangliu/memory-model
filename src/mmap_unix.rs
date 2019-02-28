@@ -10,8 +10,19 @@
 
 use libc::c_void;
 pub use libc::MAP_FAILED;
-pub use std::os::unix::io::AsRawFd as AsRawFd;
+use std::os::unix::io::AsRawFd;
 use std::ptr::null_mut;
+
+pub type RawFile = std::os::unix::io::RawFd;
+pub trait AsRawFile {
+    fn as_raw_file(&self) -> RawFile;
+}
+
+impl AsRawFile for std::fs::File {
+    fn as_raw_file(&self) -> RawFile {
+        self.as_raw_fd()
+    }
+}
 
 pub unsafe fn map_anon_mem(size: usize) -> *mut c_void {
     return libc::mmap(
@@ -24,13 +35,13 @@ pub unsafe fn map_anon_mem(size: usize) -> *mut c_void {
     );
 }
 
-pub unsafe fn map_shared_mem(file: &AsRawFd, size: usize, offset: usize) -> *mut c_void {
+pub unsafe fn map_shared_mem(file: &AsRawFile, size: usize, offset: usize) -> *mut c_void {
     return libc::mmap(
         null_mut(),
         size,
         libc::PROT_READ | libc::PROT_WRITE,
         libc::MAP_SHARED,
-        file.as_raw_fd(),
+        file.as_raw_file(),
         offset as libc::off_t,
     );
 }

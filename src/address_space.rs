@@ -5,10 +5,10 @@
 //! by address ranges for memory and memory-mapped IO areas.
 
 #[cfg(unix)]
-use std::os::unix::io::{AsRawFd, RawFd};
+use mmap_unix::{AsRawFile, RawFile};
 
 #[cfg(windows)]
-use mmap_windows::{AsRawFd, RawFd};
+use mmap_windows::{AsRawFile, RawFile};
 
 use std::sync::{Arc, Mutex};
 
@@ -65,7 +65,7 @@ pub struct AddressRegion {
     ty: AddressRegionType,
     base: GuestAddress,
     size: usize,
-    fd: Option<Arc<AsRawFd>>,
+    fd: Option<Arc<AsRawFile>>,
     offset: usize,
 }
 
@@ -82,11 +82,11 @@ impl AddressRegion {
     }
 
     /// Create a memory region mapping content from a file descriptor.
-    pub fn from_fd(
+    pub fn from_file(
         ty: AddressRegionType,
         base: GuestAddress,
         size: usize,
-        fd: Arc<AsRawFd>,
+        fd: Arc<AsRawFile>,
         offset: usize,
     ) -> Self {
         AddressRegion {
@@ -114,7 +114,7 @@ impl AddressRegion {
     }
 
     /// Get optional file descriptor backing the memory region.
-    pub fn get_fd(&self) -> Option<Arc<AsRawFd>> {
+    pub fn get_file(&self) -> Option<Arc<AsRawFile>> {
         match self.fd {
             Some(ref fd) => Some(fd.clone()),
             None => None,
@@ -127,7 +127,7 @@ impl AddressRegion {
     }
 
     /// Check whether memory region has associated file descriptor
-    pub fn has_fd(&self) -> bool {
+    pub fn has_file(&self) -> bool {
         self.fd.is_some()
     }
 
@@ -162,10 +162,10 @@ impl AddressRegion {
     }
 }
 
-impl AsRawFd for AddressRegion {
-    fn as_raw_fd(&self) -> RawFd {
+impl AsRawFile for AddressRegion {
+    fn as_raw_file(&self) -> RawFile {
         match self.fd {
-            Some(ref fd) => fd.as_raw_fd(),
+            Some(ref fd) => fd.as_raw_file(),
             None => panic!("memory region has no associated file descriptor!"),
         }
     }
@@ -210,11 +210,11 @@ impl AddressSpace {
         ty: AddressRegionType,
         base: GuestAddress,
         size: usize,
-        fd: Option<Arc<AsRawFd>>,
+        fd: Option<Arc<AsRawFile>>,
         offset: usize,
     ) -> Result<usize, Error> {
         let region = match fd {
-            Some(fd1) => Arc::new(AddressRegion::from_fd(ty, base, size, fd1, offset)),
+            Some(fd1) => Arc::new(AddressRegion::from_file(ty, base, size, fd1, offset)),
             None => Arc::new(AddressRegion::new(ty, base, size)),
         };
         self.insert_region(region)
@@ -306,7 +306,7 @@ impl AddressSpace {
             if types.contains(&region.ty) {
                 let mapping = match region.fd {
                     Some(ref fd) => {
-                        MemoryMapping::from_fd_offset(&**fd, region.size, region.offset)
+                        MemoryMapping::from_file_offset(&**fd, region.size, region.offset)
                             .map_err(|e| Error::MemoryMappingFailed(e))?
                     }
                     None => MemoryMapping::new(region.size)
@@ -375,7 +375,7 @@ mod tests {
         let mut f = Arc::new(tempfile().unwrap());
         let sample_buf = &[1, 2, 3, 4, 5];
         assert!(Arc::get_mut(&mut f).unwrap().write_all(sample_buf).is_ok());
-        let reg2 = AddressRegion::from_fd(
+        let reg2 = AddressRegion::from_file(
             AddressRegionType::DefaultMemory,
             GuestAddress(0x1000),
             0x1000,
@@ -445,9 +445,9 @@ mod tests {
             )
             .unwrap();
         let region = space.get_region(0).unwrap();
-        assert_eq!(region.get_fd().unwrap().as_raw_fd(), f.as_raw_fd());
+        assert_eq!(region.get_file().unwrap().as_raw_file(), f.as_raw_file());
         assert_eq!(region.get_offset(), 0);
-        assert!(region.has_fd());
+        assert!(region.has_file());
 
         let regions = space.get_regions_by_type(AddressRegionType::DefaultMemory);
         assert_eq!(regions.len(), 0);
@@ -470,8 +470,8 @@ mod tests {
         assert_eq!(region.get_base().offset(), 0x0);
         assert_eq!(region.get_size(), 0x100000);
         assert_eq!(region.get_offset(), 0);
-        assert!(region.get_fd().is_none());
-        assert!(!region.has_fd());
+        assert!(region.get_file().is_none());
+        assert!(!region.has_file());
 
         let m = space.map_guest_memory(&[AddressRegionType::DeviceMemory]);
         assert!(m.is_err());
@@ -516,6 +516,6 @@ mod tests {
             GuestAddress(0x1000),
             0x1000,
         );
-        let _ = reg1.as_raw_fd();
+        let _ = reg1.as_raw_file();
     }
 }
