@@ -30,9 +30,9 @@ pub use endian::*;
 pub mod guest_memory;
 pub use guest_memory::*;
 
-#[cfg(feature = "memory-backend-mmap")]
+#[cfg(feature = "vm-memory-backend-mmap")]
 pub mod mmap;
-#[cfg(feature = "memory-backend-mmap")]
+#[cfg(feature = "vm-memory-backend-mmap")]
 pub use mmap::*;
 
 pub mod volatile_memory;

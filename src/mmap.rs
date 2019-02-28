@@ -185,7 +185,7 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     /// * Write a slice at guest address 0x1200.
     ///
     /// ```
-    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use vm_memory::{Bytes, GuestAddress, GuestMemoryMmap};
     /// # let start_addr = GuestAddress(0x1000);
     /// # let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
     ///   let res = gm.write(&[1,2,3,4,5], GuestAddress(0x1200)).unwrap();
@@ -202,7 +202,7 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     /// * Read a slice of length 16 at guestaddress 0x1200.
     ///
     /// ```
-    /// # use memory_model::{Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use vm_memory::{Bytes, GuestAddress, GuestMemoryMmap};
     /// # let start_addr = GuestAddress(0x1000);
     /// # let mut gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();
     ///   let buf = &mut [0u8; 16];
@@ -235,7 +235,7 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     /// * Read bytes from /dev/urandom
     ///
     /// ```
-    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryMmap};
     /// # use std::fs::File;
     /// # use std::path::Path;
     /// # let start_addr = GuestAddress(0x1000);
@@ -268,7 +268,7 @@ impl Bytes<MemoryRegionAddress> for GuestRegionMmap {
     /// * Write 128 bytes to /dev/null
     ///
     /// ```
-    /// # use memory_model::{Address, Bytes, GuestAddress, GuestMemoryMmap};
+    /// # use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryMmap};
     /// # use std::fs::OpenOptions;
     /// # let start_addr = GuestAddress(0x1000);
     /// # let gm = GuestMemoryMmap::new(&vec![(start_addr, 0x400)]).unwrap();

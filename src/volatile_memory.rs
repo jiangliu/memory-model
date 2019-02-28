@@ -80,7 +80,7 @@ pub type Result<T> = result::Result<T, Error>;
 /// # Examples
 ///
 /// ```
-/// # use memory_model::volatile_memory::*;
+/// # use vm_memory::volatile_memory::*;
 /// # fn get_slice(offset: usize, count: usize) -> Result<()> {
 ///   let mem_end = calc_offset(offset, count)?;
 ///   if mem_end > 100 {
@@ -211,7 +211,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// let mut mem = [0u8; 32];
     /// let mem_ref = &mut mem[..];
@@ -243,7 +243,7 @@ impl<'a> VolatileSlice<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// let mut mem = [0u8; 32];
     /// let mem_ref = &mut mem[..];
@@ -268,7 +268,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// let mut mem = [0u8; 32];
     /// let mem_ref = &mut mem[..];
@@ -307,7 +307,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// #     let mut mem = [0u8; 32];
     /// #     let mem_ref = &mut mem[..];
@@ -333,7 +333,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// #     let mut mem = [0u8; 32];
     /// #     let mem_ref = &mut mem[..];
@@ -360,7 +360,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// #     let mut mem = [0u8; 32];
     /// #     let mem_ref = &mut mem[..];
@@ -386,7 +386,7 @@ impl<'a> VolatileSlice<'a> {
     /// ```
     /// # use std::fs::File;
     /// # use std::path::Path;
-    /// # use memory_model::VolatileMemory;
+    /// # use vm_memory::VolatileMemory;
     /// # fn test_write_null() -> Result<(), ()> {
     /// #     let mut mem = [0u8; 32];
     /// #     let mem_ref = &mut mem[..];
@@ -423,7 +423,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Write a slice at offset 256.
     ///
     /// ```
-    /// #   use memory_model::{Bytes, VolatileMemory};
+    /// #   use vm_memory::{Bytes, VolatileMemory};
     /// #   let mut mem = [0u8; 1024];
     /// #   let mut mem_ref = &mut mem[..];
     /// #   let vslice = mem_ref.as_volatile_slice();
@@ -452,7 +452,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Read a slice of size 16 at offset 256.
     ///
     /// ```
-    /// #   use memory_model::{Bytes, VolatileMemory};
+    /// #   use vm_memory::{Bytes, VolatileMemory};
     /// #   let mut mem = [0u8; 1024];
     /// #   let mut mem_ref = &mut mem[..];
     /// #   let vslice = mem_ref.as_volatile_slice();
@@ -480,7 +480,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Write a slice at offset 256.
     ///
     /// ```
-    /// #   use memory_model::{Bytes, VolatileMemory};
+    /// #   use vm_memory::{Bytes, VolatileMemory};
     /// #   let mut mem = [0u8; 1024];
     /// #   let mut mem_ref = &mut mem[..];
     /// #   let vslice = mem_ref.as_volatile_slice();
@@ -505,7 +505,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Read a slice of size 16 at offset 256.
     ///
     /// ```
-    /// #   use memory_model::{Bytes, VolatileMemory};
+    /// #   use vm_memory::{Bytes, VolatileMemory};
     /// #   let mut mem = [0u8; 1024];
     /// #   let mut mem_ref = &mut mem[..];
     /// #   let vslice = mem_ref.as_volatile_slice();
@@ -532,7 +532,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Read bytes from /dev/urandom
     ///
     /// ```
-    /// # use memory_model::{Bytes, VolatileMemory};
+    /// # use vm_memory::{Bytes, VolatileMemory};
     /// # use std::fs::File;
     /// # use std::path::Path;
     /// # fn test_read_random() -> Result<u32, ()> {
@@ -567,7 +567,7 @@ impl<'a> Bytes<usize> for VolatileSlice<'a> {
     /// * Write 128 bytes to /dev/null
     ///
     /// ```
-    /// # use memory_model::{Bytes, VolatileMemory};
+    /// # use vm_memory::{Bytes, VolatileMemory};
     /// # use std::fs::File;
     /// # use std::path::Path;
     /// # fn test_write_null() -> Result<(), ()> {
@@ -615,7 +615,7 @@ impl<'a> VolatileMemory for VolatileSlice<'a> {
 /// # Examples
 ///
 /// ```
-/// # use memory_model::VolatileRef;
+/// # use vm_memory::VolatileRef;
 ///   let mut v = 5u32;
 ///   assert_eq!(v, 5);
 ///   let v_ref = unsafe { VolatileRef::new(&mut v as *mut u32) };
@@ -656,7 +656,7 @@ impl<'a, T: DataInit> VolatileRef<'a, T> {
     ///
     /// ```
     /// # use std::mem::size_of;
-    /// # use memory_model::VolatileRef;
+    /// # use vm_memory::VolatileRef;
     ///   let v_ref = unsafe { VolatileRef::new(0 as *mut u32) };
     ///   assert_eq!(v_ref.len(), size_of::<u32>() as usize);
     /// ```

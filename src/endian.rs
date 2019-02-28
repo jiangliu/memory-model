@@ -10,7 +10,7 @@
 //! # Examples
 //!
 //! ```
-//! # use  memory_model::*;
+//! # use  vm_memory::*;
 //!   let b: Be32 = From::from(3);
 //!   let l: Le32 = From::from(3);
 //!
